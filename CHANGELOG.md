@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.2.1 — 10 septembre 2026
+
+- Le décodage ISM reçoit désormais l'I/Q brut ; la suppression de la composante centrale reste limitée à l'affichage FFT/waterfall afin de ne pas créer de creux au milieu du canal décodé.
+
 ## 0.2.0 — 10 septembre 2026
 
 - Version visible dans le titre et l’en-tête, centralisée avec les métadonnées du paquet.

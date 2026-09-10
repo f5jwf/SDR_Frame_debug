@@ -191,12 +191,16 @@ class Engine:
                     else:plugin.configure(s.sample_rate,s.center,plugin.channels.get(s.channel,s.center),{**options,"rf_bandwidth":usable_bandwidth(s)})
                     analyzer=None
                 previous=serial
-                if s.dc: iq=iq-iq.mean()
+                # The external ISM decoder must receive the samples as acquired.
+                # Removing the mean one block at a time creates a notch at the
+                # tuning frequency and can erase a narrow OOK/FSK transmission
+                # which is otherwise perfectly visible in the FFT.
                 self.publish_frames(plugin.process_iq(iq,ts))
+                display_iq=iq-iq.mean() if s.dc else iq
                 key=(s.fft_size,s.window,s.average,s.gain,s.agc)
                 if analyzer is None or key!=analysis_key:
                     analyzer=Spectrum(s.fft_size,s.window,s.average); analysis_key=key
-                analyzer.feed(iq)
+                analyzer.feed(display_iq)
                 now=time.monotonic()
                 if now-last_fft >= s.waterfall_ms/1000:
                     snapshot=analyzer.snapshot(s.spectrum_mode)
