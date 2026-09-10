@@ -163,6 +163,13 @@ class Engine:
             while not self.dsp_done.is_set():
                 try:self.blocks.put(None,timeout=.1);break
                 except queue.Full:continue
+    def publish_frames(self,frames):
+        for frame in frames:
+            self.increment('total')
+            if frame.crc_ok is not None:self.increment('ok' if frame.crc_ok else 'bad')
+            try:self.frames.put_nowait(frame)
+            except queue.Full:self.increment('dropped_frames')
+
     def dsp(self):
         previous=None; generation=None; plugin=None; analyzer=None; analysis_key=None; last_fft=0; perf_start=time.monotonic(); busy=0.; samples=0; blocks=0; worst=0.
         try:
@@ -173,21 +180,19 @@ class Engine:
                 gen,serial,s,options,iq,ts=item
                 work_start=time.perf_counter()
                 if gen!=generation or previous is None:
+                    if plugin is not None and hasattr(plugin,"finish"):self.publish_frames(plugin.finish())
                     plugin=self.plugin_types[s.protocol]()
-                    frequency=plugin.channels.get(s.channel,s.center)
+                    frequency=s.rx_frequency if s.workspace!='zigbee' else plugin.channels.get(s.channel,s.center)
                     plugin.configure(s.sample_rate,s.center,frequency,{**options,"rf_bandwidth":usable_bandwidth(s)})
                     generation=gen; analyzer=None
-                    self.event('decode_status','Décodage actif' if getattr(plugin,'enabled',True) else 'Spectre seul : choisir une cadence proposée et placer le canal entier dans la bande RF')
+                    self.event('decode_status',getattr(plugin,'status',None) or ('Décodage actif' if getattr(plugin,'enabled',True) else 'Spectre seul : choisir une cadence proposée et placer le canal entier dans la bande RF'))
                 elif serial!=previous+1:
                     if hasattr(plugin,"reset_stream"):plugin.reset_stream()
                     else:plugin.configure(s.sample_rate,s.center,plugin.channels.get(s.channel,s.center),{**options,"rf_bandwidth":usable_bandwidth(s)})
                     analyzer=None
                 previous=serial
                 if s.dc: iq=iq-iq.mean()
-                for frame in plugin.process_iq(iq,ts):
-                    self.increment('total'); self.increment('ok' if frame.crc_ok else 'bad')
-                    try: self.frames.put_nowait(frame)
-                    except queue.Full: self.increment('dropped_frames')
+                self.publish_frames(plugin.process_iq(iq,ts))
                 key=(s.fft_size,s.window,s.average,s.gain,s.agc)
                 if analyzer is None or key!=analysis_key:
                     analyzer=Spectrum(s.fft_size,s.window,s.average); analysis_key=key
@@ -210,4 +215,8 @@ class Engine:
                     perf_start=time.monotonic(); busy=0.; samples=0; blocks=0; worst=0.
         except Exception as exc:
             log.exception('DSP interrompu'); self.event('error',str(exc)); self.stop_event.set()
-        finally: self.dsp_done.set();self.event('stopped',None)
+        finally:
+            try:
+                if plugin is not None and hasattr(plugin,'finish'):self.publish_frames(plugin.finish())
+            except Exception as exc:self.event('error',f'Fermeture décodeur : {exc}')
+            self.dsp_done.set();self.event('stopped',None)

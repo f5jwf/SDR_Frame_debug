@@ -1,3 +1,33 @@
+# SDR Frame Debug 0.2.0
+
+L’application propose trois onglets : **Zigbee 2,4 GHz**, **ISM 433 MHz** et **ISM 868 MHz**. La version apparaît dans le titre et dans l’en-tête. Les réglages sont conservés séparément pour chaque bande, y compris les préférences historiques Zigbee.
+
+Les onglets ISM reçoivent avec le Pluto ou le RTL-SDR, affichent le spectre, le waterfall et un canal de largeur réglable. Le moteur externe [rtl_433 25.12](https://github.com/merbanan/rtl_433/releases/tag/25.12) prend en charge des dispositifs OOK/ASK et FSK. La connaissance de la modulation ne suffit pas à décoder tous les formats propriétaires ; LoRa CSS n’est pas inclus.
+
+## Utiliser les onglets
+
+- Sélectionner l’onglet, le SDR et son URI, puis Démarrer. En ISM, le réglage initial est 1 MS/s, RX à 433,92 ou 868,30 MHz et une largeur de 200 kHz.
+- Modifier RX ou déplacer le marqueur ; régler Largeur pour ajuster le filtre et son rectangle. Cliquer Appliquer pour modifier la réception, ou Recentrer sur RX si le canal sort de la bande acquise.
+- Modulation filtre les résultats annoncés par rtl_433 : Auto, OOK/ASK ou FSK. Le détecteur FSK propose classic, minmax et auto ; classic est validé sur la démonstration LaCrosse.
+- Décodeurs vide conserve la sélection automatique standard du moteur. Des identifiants séparés par des virgules permettent une sélection explicite, y compris des protocoles désactivés par défaut. La commande `runtime\rtl_433\rtl_433.exe -R help` liste les identifiants.
+- Un changement d’onglet arrête et libère le SDR précédent avant de reprendre avec le profil choisi. Une capture I/Q en cours est finalisée et doit être relancée manuellement. Les trames, favoris, clés Zigbee et historiques restent dans leurs espaces pendant la session. Les trames ne sont pas restaurées automatiquement après fermeture : utiliser les exports.
+
+Pour installer le moteur Windows depuis son archive officielle vérifiée par SHA-256 :
+
+```powershell
+.\.venv\Scripts\python.exe tools\install_rtl433.py
+```
+
+Il est déjà installé dans l’environnement de développement local. Ailleurs, le bouton **Moteur rtl_433…** permet de choisir un exécutable existant ; PATH est également consulté. Sans moteur, le spectre fonctionne et l’application indique explicitement l’absence de décodage. Le répertoire `runtime/` n’est pas versionné. Voir [THIRD_PARTY.md](THIRD_PARTY.md) pour la provenance et la licence.
+
+Le résultat ISM présente le modèle, l’identifiant et les mesures disponibles. Un CRC absent reste « non renseigné ». Les niveaux non fournis sont laissés absents ; le RSSI rtl_433 n’est pas assimilé aux dBFS du spectre. Certains décodeurs ne retournent pas les octets bruts : la vue l’indique et affiche leur résultat JSON. Les exports ISM sont JSON et CSV ; le PCAP reste réservé à Zigbee. Plusieurs décodeurs peuvent reconnaître le même signal : le numéro de protocole permet de les distinguer.
+
+La Démonstration utilise un signal Zigbee dans le premier onglet, un Nexus OOK dans le deuxième et un LaCrosse FSK dans le troisième. Ces signaux sont synthétiques et ne sont jamais émis. Les dispositifs réels nécessitent une antenne adaptée et une qualification RF séparée.
+
+La version est centralisée dans `sdr_debug/version.py`. Chaque livraison doit l’incrémenter et mettre à jour le changelog et le fichier Word de spécifications. Les tests multibandes couvrent les profils séparés, la bascule exclusive, le décodage du véritable processus rtl_433 sur I/Q synthétiques et les limites d’export.
+
+---
+
 # SDR Frame Debug
 
 Application Python de réception et diagnostic SDR, développée à partir de `doc/Specification_Application_SDR_Zigbee.docx`. Windows, PySide6 et pyqtgraph. Aucun chemin d’émission RF.
@@ -48,7 +78,7 @@ Les parseurs couvrent le MAC 2003/2006 courant, les en-têtes Zigbee NWK/APS et 
 - RTL : RF affichée = fréquence du tuner + offset. Exemple : RF 2425 MHz avec convertisseur LO 1800 MHz → tuner 625 MHz. La plage RTL standard est limitée à 0,5–1766 MHz ; celle du Pluto standard à 325–3800 MHz.
 - PCAP est fourni (link type 195, FCS inclus) ; PCAPNG et SoapySDR restent des extensions possibles.
 
-## Validation effectuée
+## Historique de validation avant la version multibande
 
 - 36 tests automatisés : CRC de référence, démodulation 4/8 MS/s avec bruit/phase/CFO ±100 kHz, blocs de taille impaire, trames consécutives, CRC BAD, longueur maximale, translation NCO, déchiffrement et mauvaise clé, trames tronquées, SigMF/exports, rééchantillonnage RTL, ajout d’un plugin et arrêt/reconfiguration.
 - Démonstration avec interface : 61 trames CRC valides en environ cinq secondes, aucune perte logicielle lors de ce contrôle court.

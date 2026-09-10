@@ -6,3 +6,5 @@ build/
 dist/
 captures/
 .pytest_*/
+runtime/
+.docx_qa/

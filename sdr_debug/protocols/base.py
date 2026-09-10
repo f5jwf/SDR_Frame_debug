@@ -8,11 +8,12 @@ class Frame:
     channel: int
     frequency: float
     raw: bytes
-    crc_ok: bool
+    crc_ok: bool | None
     level: float
     fields: dict[str, Any] = field(default_factory=dict)
     summary: str = ""
     favorite: bool = False
+    protocol: str = "zigbee"
 
 
 class ProtocolPlugin(Protocol):

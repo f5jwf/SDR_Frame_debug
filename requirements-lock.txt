@@ -18,6 +18,6 @@ PySide6_Addons==6.11.2
 PySide6_Essentials==6.11.2
 pytest==9.1.1
 scipy==1.18.1
-# Editable install with no version control (sdr-frame-debug==0.1.0)
+# Editable install with no version control (sdr-frame-debug==0.2.0)
 -e .
 shiboken6==6.11.2

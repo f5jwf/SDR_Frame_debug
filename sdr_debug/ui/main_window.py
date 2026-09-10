@@ -10,6 +10,7 @@ import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtGui, QtWidgets as W
 from .. import config
+from ..version import __version__
 from ..dsp.engine import Engine
 from ..export.packets import export_frames
 from ..protocols.registry import available
@@ -25,7 +26,9 @@ class TimestampItem(W.QTableWidgetItem):
 
 class MainWindow(W.QMainWindow):
     def __init__(self):
-        super().__init__(); self.setWindowTitle('SDR Frame Debug · Analyseur Zigbee'); self.resize(1500,900)
+        super().__init__(); self.setWindowTitle(f'SDR Frame Debug v{__version__}'); self.resize(1500,960)
+        self.band='zigbee';self.views={};self.switch_target=None;self.resume_after_switch=False
+        self.last_plot=None
         self.settings=config.load(); self.newest_first=self.settings.newest_first; self.row_items={}; self.engine=Engine(isolated=True); self.packets=deque(maxlen=2000); self.pending=deque(maxlen=2000)
         self.plugins=available(); self.tasks=queue.Queue(); self.active=False; self.closing=False
         self.last_water_render=0.; self.water_palette=None; self.last_frequency_range=None
@@ -47,8 +50,11 @@ class MainWindow(W.QMainWindow):
 
     def build(self):
         root=W.QWidget(); self.setCentralWidget(root); layout=W.QVBoxLayout(root)
-        heading=W.QHBoxLayout(); title=W.QLabel('SDR FRAME DEBUG'); title.setStyleSheet('font-size:22px;font-weight:700;color:#61d4ff')
-        heading.addWidget(title); heading.addStretch(); heading.addWidget(W.QLabel('RÉCEPTION UNIQUEMENT  •  I/Q / FFT / ZIGBEE')); layout.addLayout(heading)
+        heading=W.QHBoxLayout(); title=W.QLabel(f'SDR FRAME DEBUG  v{__version__}'); title.setStyleSheet('font-size:22px;font-weight:700;color:#61d4ff')
+        heading.addWidget(title); heading.addStretch(); heading.addWidget(W.QLabel('RÉCEPTION UNIQUEMENT  •  I/Q / FFT / ZIGBEE / ISM')); layout.addLayout(heading)
+        self.tabs=W.QTabBar();self.tabs.setObjectName('band_tabs');self.tabs.setExpanding(False)
+        for name in ('Zigbee 2,4 GHz','ISM 433 MHz','ISM 868 MHz'):self.tabs.addTab(name)
+        self.tabs.currentChanged.connect(self.switch_band);layout.addWidget(self.tabs)
         controls=W.QGridLayout(); layout.addLayout(controls)
         self.backend=W.QComboBox(); self.backend.addItems(['PlutoSDR','Démonstration','Rejeu SigMF','RTL-SDR'])
         self.uri=W.QLineEdit(); self.uri.setPlaceholderText('ip:192.168.2.1 / URI IIO')
@@ -56,7 +62,9 @@ class MainWindow(W.QMainWindow):
         self.start_button=W.QPushButton('Démarrer'); self.start_button.clicked.connect(self.toggle)
         self.apply_button=W.QPushButton('Appliquer'); self.apply_button.clicked.connect(self.apply)
         self.protocol=W.QComboBox()
-        for ident,cls in self.plugins.items(): self.protocol.addItem(cls.name,ident)
+        for ident,cls in self.plugins.items():
+            if ident=='zigbee':self.protocol.addItem(cls.name,ident)
+        self.protocol.setEnabled(False)
         self.protocol.currentIndexChanged.connect(self.protocol_changed)
         for i,(label,widget) in enumerate([('Source',self.backend),('URI',self.uri),('Protocole',self.protocol)]):
             controls.addWidget(W.QLabel(label),0,i*2); controls.addWidget(widget,0,i*2+1)
@@ -79,6 +87,22 @@ class MainWindow(W.QMainWindow):
         self.channel=W.QComboBox(); self.channel.currentIndexChanged.connect(self.channel_changed)
         controls.addWidget(self.channel,2,6)
         self.recenter=W.QPushButton('Recentrer sur RX'); self.recenter.clicked.connect(self.recenter_rx); controls.addWidget(self.recenter,2,7,1,2)
+        self.ism_controls=W.QWidget();ism=W.QGridLayout(self.ism_controls);ism.setContentsMargins(0,0,0,0)
+        self.rx_frequency=self.spin(300,1000,.001,433.92,6,' MHz')
+        self.rx_frequency.valueChanged.connect(self.channel_changed)
+        self.channel_width=self.spin(10,800,10,200,0,' kHz');self.channel_width.valueChanged.connect(self.channel_changed)
+        self.modulation=W.QComboBox()
+        for label,value in [('Auto OOK/ASK + FSK','auto'),('OOK / ASK','ook'),('FSK','fsk')]:self.modulation.addItem(label,value)
+        self.modulation.setToolTip('La détection reste automatique ; ce choix filtre la modulation des trames retournées.')
+        self.decoder_ids=W.QLineEdit();self.decoder_ids.setPlaceholderText('Décodeurs rtl_433 : vide = automatiques')
+        self.ism_presets=W.QComboBox();self.ism_presets.activated.connect(lambda i:self.rx_frequency.setValue(self.ism_presets.itemData(i)) if self.ism_presets.itemData(i) is not None else None)
+        self.fsk_detector=W.QComboBox();self.fsk_detector.addItems(['classic','minmax','auto'])
+        self.fsk_detector.setToolTip('Algorithme de détection FSK de rtl_433 ; classic est validé sur la démonstration LaCrosse.')
+        self.decoder_path=W.QPushButton('Moteur rtl_433…');self.decoder_path.clicked.connect(self.choose_decoder)
+        for i,(label,widget) in enumerate([('RX',self.rx_frequency),('Largeur',self.channel_width),('Modulation',self.modulation)]):
+            ism.addWidget(W.QLabel(label),0,2*i);ism.addWidget(widget,0,2*i+1)
+        ism.addWidget(self.ism_presets,0,6);ism.addWidget(self.decoder_ids,1,0,1,4);ism.addWidget(W.QLabel('Détecteur FSK'),1,4);ism.addWidget(self.fsk_detector,1,5);ism.addWidget(self.decoder_path,1,6)
+        layout.addWidget(self.ism_controls);self.ism_controls.hide()
         self.rx_label=W.QLabel(); layout.addWidget(self.rx_label)
         self.level_label=W.QLabel('Niveaux en dBFS, non calibrés en dBm · Gain matériel : —'); layout.addWidget(self.level_label)
         self.actual_gain_text='—'
@@ -133,10 +157,10 @@ class MainWindow(W.QMainWindow):
         export=W.QPushButton('Exporter trames'); export.clicked.connect(self.export)
         session=W.QPushButton('Sauver session'); session.clicked.connect(lambda:self.export(session=True))
         prefs=W.QPushButton('FFT / Waterfall'); prefs.clicked.connect(self.preferences)
-        keys=W.QPushButton('Clés Zigbee'); keys.clicked.connect(self.keys_dialog)
+        keys=W.QPushButton('Clés Zigbee'); keys.clicked.connect(self.keys_dialog);self.keys_button=keys
         for button in (replay,self.record,export,session,prefs,keys): tools.addWidget(button)
         tools.addStretch(); self.key_options={}
-        self.setStyleSheet('QMainWindow,QWidget{background:#111b29;color:#dce5f2;} QLineEdit,QComboBox,QSpinBox,QDoubleSpinBox,QPlainTextEdit,QTreeWidget,QTableWidget{background:#172438;selection-background-color:#28566b;} QPushButton{background:#243a50;border:1px solid #39536e;padding:7px;border-radius:4px;} QPushButton:hover{background:#31516c;} QPushButton:checked{background:#805820;} QHeaderView::section{background:#24364c;padding:4px;} QCheckBox::indicator{width:18px;height:18px;border:1px solid #8196ae;border-radius:3px;background:#172438;} QCheckBox::indicator:checked{background:#39bda4;border:2px solid #a1ffed;} QToolTip{background:#24364c;color:white;}')
+        self.setStyleSheet('QMainWindow,QWidget{background:#111b29;color:#dce5f2;} QLineEdit,QComboBox,QSpinBox,QDoubleSpinBox,QPlainTextEdit,QTreeWidget,QTableWidget{background:#172438;selection-background-color:#28566b;} QPushButton{background:#243a50;border:1px solid #39536e;padding:7px;border-radius:4px;} QPushButton:hover{background:#31516c;} QPushButton:checked{background:#805820;} QHeaderView::section{background:#24364c;padding:4px;} QCheckBox::indicator{width:18px;height:18px;border:1px solid #8196ae;border-radius:3px;background:#172438;} QCheckBox::indicator:checked{background:#39bda4;border:2px solid #a1ffed;} QTabBar::tab{background:#1a2a3d;padding:9px 18px;border:1px solid #39536e;margin-right:3px;} QTabBar::tab:selected{background:#24536b;color:#ffffff;border-bottom:3px solid #61d4ff;} QTabBar::tab:hover{background:#31516c;} QToolTip{background:#24364c;color:white;}')
 
     def restore(self):
         s=self.settings; self.backend.setCurrentText(s.backend); self.uri.setText(s.uri); self.center.setValue(s.center/1e6)
@@ -152,6 +176,10 @@ class MainWindow(W.QMainWindow):
         s.gain=self.gain.value(); s.agc=self.agc.isChecked(); s.offset=self.offset.value()*1e6
         s.channel=self.channel.currentData(); s.protocol=self.protocol.currentData(); s.span=min(self.span.value()*1e6,usable_bandwidth(s))
         s.newest_first=self.newest_first; s.search=self.search.text(); s.filter_field=self.filter_field.currentData() or ''; s.filter_value=self.filter_value.text(); s.show_bad=self.bad.isChecked(); s.favorites_only=self.favorite_only.isChecked()
+        s.workspace=self.band
+        if self.band!='zigbee':
+            s.rx_frequency=self.rx_frequency.value()*1e6;s.channel_width=self.channel_width.value()*1e3
+            s.modulation=self.modulation.currentData();s.decoder_ids=self.decoder_ids.text().strip();s.fsk_detector=self.fsk_detector.currentText()
         return s
 
     def protocol_changed(self,*args):
@@ -183,29 +211,36 @@ class MainWindow(W.QMainWindow):
 
     def channel_changed(self,*args):
         if self.channel.currentData() is None:return
-        cls=self.plugins[self.protocol.currentData()]; freq=cls.channels[self.channel.currentData()]/1e6
+        cls=self.plugins[self.protocol.currentData()]; freq=self.rx_frequency.value() if self.band!='zigbee' else cls.channels[self.channel.currentData()]/1e6
+        if self.band!='zigbee':self.ism_presets.setCurrentIndex(max(0,self.ism_presets.findData(freq)))
         for marker in self.markers:marker.setValue(freq)
-        half_width=cls.bandwidth/2e6
+        width=self.channel_width.value()*1e3 if self.band!='zigbee' else cls.bandwidth
+        half_width=width/2e6
         for region in self.channel_regions:region.setRegion((freq-half_width,freq+half_width))
-        outside=abs(freq*1e6-self.settings.center)+cls.bandwidth/2>usable_bandwidth(self.settings)/2
+        outside=abs(freq*1e6-self.settings.center)+width/2>usable_bandwidth(self.settings)/2
         hint='Canal hors bande : cliquer Recentrer sur RX' if outside else 'Appliquer pour modifier la réception'
-        self.rx_label.setText(f'Canal RX : {self.channel.currentText()} · Largeur canal {cls.bandwidth/1e6:g} MHz · Taux réel : {self.settings.sample_rate:,} éch/s · Bande RF {usable_bandwidth(self.settings)/1e6:g} MHz · {hint}')
+        self.rx_label.setText(f'Canal RX : {freq:g} MHz · Largeur canal {width/1e6:g} MHz · Taux réel : {self.settings.sample_rate:,} éch/s · Bande RF {usable_bandwidth(self.settings)/1e6:g} MHz · {hint}')
 
     def marker_moved(self,marker):
+        if self.band!='zigbee':
+            self.rx_frequency.setValue(marker.value());self.channel_changed()
+            if self.active:self.apply()
+            return
         cls=self.plugins[self.protocol.currentData()]; c=min(cls.channels,key=lambda c:abs(cls.channels[c]/1e6-marker.value()))
         self.channel.setCurrentIndex(self.channel.findData(c)); self.channel_changed()
         if self.active:self.apply()
 
     def recenter_rx(self):
-        cls=self.plugins[self.protocol.currentData()]; self.center.setValue(cls.channels[self.channel.currentData()]/1e6)
+        cls=self.plugins[self.protocol.currentData()]; self.center.setValue(self.rx_frequency.value() if self.band!='zigbee' else cls.channels[self.channel.currentData()]/1e6)
         if self.active:self.apply()
 
     def toggle(self):
+        if self.switch_target is not None:return
         if self.active:
             self.engine.stop(); self.start_button.setEnabled(False); self.start_button.setText('Arrêt…'); return
         if any(t.is_alive() for t in self.engine.threads):return
         self.engine=Engine(isolated=True); self.water=None; self.water_count=0; self.last_total=0
-        self.settings=self.current(); self.engine.start(self.settings,self.key_options); self.active=True
+        self.settings=self.current(); self.engine.start(self.settings,self.decoder_options()); self.active=True
         self.start_button.setText('Arrêter'); self.backend.setEnabled(False); config.save(self.settings)
 
     def rate_changed(self,*args):
@@ -221,9 +256,10 @@ class MainWindow(W.QMainWindow):
         if self.active and self.backend.currentText()=='PlutoSDR':
             self.engine.set_gain(self.gain.value(),self.agc.isChecked())
     def apply(self):
+        if self.switch_target is not None:return
         self.gain_timer.stop()
         s=self.current(); self.span.setMaximum(usable_bandwidth(s)/1e6); self.span_slider.setMaximum(int(usable_bandwidth(s)/1e5))
-        if self.active:self.engine.reconfigure(s,self.key_options)
+        if self.active:self.engine.reconfigure(s,self.decoder_options())
         else:self.settings=s
         config.save(s); self.set_range()
 
@@ -250,7 +286,7 @@ class MainWindow(W.QMainWindow):
         self.record.setChecked(bool(path)); self.engine.recording(path or None)
 
     def matches(self,frame):
-        if not frame.crc_ok and not self.bad.isChecked():return False
+        if frame.crc_ok is False and not self.bad.isChecked():return False
         if self.favorite_only.isChecked() and not frame.favorite:return False
         query=self.search.text().strip().lower()
         if query and query not in (frame.summary+' '+json.dumps(frame.fields,ensure_ascii=False)).lower() and query.replace(' ','') not in frame.raw.hex():return False
@@ -292,7 +328,7 @@ class MainWindow(W.QMainWindow):
             if before:hi=mid
             else:lo=mid+1
         row=lo; self.table.insertRow(row)
-        values=['★' if frame.favorite else '',datetime.fromtimestamp(frame.timestamp).strftime('%Y-%m-%d\n%H:%M:%S.%f')[:-3],str(frame.channel),f'{frame.level:.1f}','OK' if frame.crc_ok else 'BAD',frame.summary]
+        values=['★' if frame.favorite else '',datetime.fromtimestamp(frame.timestamp).strftime('%Y-%m-%d\n%H:%M:%S.%f')[:-3],str(frame.channel),f'{frame.level:.1f}' if np.isfinite(frame.level) else '—','OK' if frame.crc_ok is True else ('BAD' if frame.crc_ok is False else frame.fields.get('PHY',{}).get('integrity','n/d')),frame.summary]
         for col,value in enumerate(values):
             item=(TimestampItem(value) if col==1 else W.QTableWidgetItem(value)); item.setData(QtCore.Qt.ItemDataRole.UserRole,frame)
             item.setToolTip(datetime.fromtimestamp(frame.timestamp).isoformat(timespec='milliseconds')+'\n'+frame.summary)
@@ -322,9 +358,11 @@ class MainWindow(W.QMainWindow):
                 for k,v in value.items():branch(item,k,v)
             elif isinstance(value,list):
                 for k,v in enumerate(value):branch(item,k,v)
-        branch(self.details,'Réception',{'date':datetime.fromtimestamp(frame.timestamp).isoformat(timespec='milliseconds'),'canal':frame.channel,'fréquence':frame.frequency,'dBFS':frame.level,'longueur':len(frame.raw)})
+        branch(self.details,'Réception',{'date':datetime.fromtimestamp(frame.timestamp).isoformat(timespec='milliseconds'),'canal':frame.channel,'fréquence':frame.frequency,'dBFS':frame.level if np.isfinite(frame.level) else 'non fourni','longueur':len(frame.raw) if frame.raw else 'non fournie'})
         for key,value in frame.fields.items():branch(self.details,key,value)
         self.details.expandToDepth(0)
+        if frame.protocol!='zigbee' and not frame.raw:
+            self.raw.setPlainText('Octets bruts non fournis par ce décodeur. Résultat reçu :\n'+json.dumps(frame.fields.get('rtl_433',{}),ensure_ascii=False,indent=2));return
         self.raw.setPlainText('\n'.join(f'{i:04x}  '+frame.raw[i:i+16].hex(' ').ljust(47)+'  '+''.join(chr(b) if 32<=b<127 else '.' for b in frame.raw[i:i+16]) for i in range(0,len(frame.raw),16)))
 
     def export(self,checked=False,session=False):
@@ -378,6 +416,7 @@ class MainWindow(W.QMainWindow):
         s.floor=floor.value(); s.ceiling=ceiling.value(); s.palette=palette.currentText(); s.dc=dc.isChecked(); self.water=None; self.apply()
 
     def plot(self,item):
+        self.last_plot=item
         axis,power,ts,rate,center=item; self.curve.setData(axis/1e6,power)
         s=self.settings; rows=int(s.history*1000/s.waterfall_ms); bins=min(len(power),max(64,64*1024*1024//(rows*4)))
         # Ring buffer: allocation bounded independently of session duration.
@@ -459,10 +498,96 @@ class MainWindow(W.QMainWindow):
         now=time.monotonic()
         if now-self.last_stats>=1:
             c=self.engine.counts; fps=(c['total']-self.last_total)/(now-self.last_stats); self.last_total=c['total']; self.last_stats=now
-            self.stats.setText(f"{fps:.1f} trames/s   ·   Total {c['total']}   ·   CRC OK {c['ok']} / BAD {c['bad']}   ·   Blocs perdus (logiciel) {c['dropped_blocks']}   ·   Trames non affichées {c['dropped_frames']}   ·   Mémoire : {len(self.packets)}/2000 trames (+{len(self.pending)} en pause)")
+            self.stats.setText(f"{fps:.1f} trames/s   ·   Total {c['total']}   ·   CRC OK {c['ok']} / BAD {c['bad']} / n.d. {c['total']-c['ok']-c['bad']}   ·   Blocs perdus (logiciel) {c['dropped_blocks']}   ·   Trames non affichées {c['dropped_frames']}   ·   Mémoire : {len(self.packets)}/2000 trames (+{len(self.pending)} en pause)")
+        if self.switch_target is not None and not self.closing and not any(t.is_alive() for t in self.engine.threads):self.complete_switch()
         if self.closing and not any(t.is_alive() for t in self.engine.threads):self.close()
 
     def closeEvent(self,event):
         if any(t.is_alive() for t in self.engine.threads):
             self.closing=True; self.engine.stop(); event.ignore(); self.statusBar().showMessage('Fermeture des workers…'); return
-        config.save(self.current()); self.key_options.clear(); event.accept()
+        config.save(self.current()); self.key_options.clear()
+        for state in self.views.values():state.get('key_options',{}).clear()
+        event.accept()
+
+
+    def decoder_options(self):
+        if self.band=='zigbee':return dict(self.key_options)
+        s=self.current()
+        return {key:getattr(s,key) for key in ('rx_frequency','channel_width','modulation','rtl433_path','decoder_ids','fsk_detector')}
+
+    def choose_decoder(self):
+        from ..protocols.ism.plugin import executable
+        current=executable(self.settings.rtl433_path) or 'Non trouvé'
+        path,_=W.QFileDialog.getOpenFileName(self,f'rtl_433 actuel : {current}',str(Path(current).parent) if current!='Non trouvé' else '', 'Exécutable (*.exe);;Tous (*)')
+        if path:self.settings.rtl433_path=path;self.apply()
+
+    def switch_band(self,index):
+        target=config.BANDS[index]
+        if target==self.band and self.switch_target is None:return
+        self.switch_target=target
+        self.gain_timer.stop()
+        if self.active or any(t.is_alive() for t in self.engine.threads):
+            self.resume_after_switch=self.resume_after_switch or self.active
+            self.engine.stop();self.start_button.setEnabled(False);self.apply_button.setEnabled(False)
+            self.statusBar().showMessage('Changement de bande : fin de la capture et libération du SDR…')
+        else:self.complete_switch()
+
+    def complete_switch(self):
+        if self.switch_target is None:return
+        self.settings=self.current();config.save(self.settings)
+        attributes=('settings','packets','pending','engine','key_options','newest_first','water','water_index',
+                    'water_count','water_key','water_times','last_plot','last_total','last_stats','actual_gain_text')
+        state={name:getattr(self,name) for name in attributes if hasattr(self,name)}
+        state['paused']=self.pause.isChecked()
+        self.views[self.band]=state
+        self.band=self.switch_target;self.switch_target=None
+        state=self.views.get(self.band)
+        if state is None:
+            settings=config.load(self.band)
+            state={'settings':settings,'packets':deque(maxlen=2000),'pending':deque(maxlen=2000),
+                   'engine':Engine(isolated=True),'key_options':{},'newest_first':settings.newest_first,
+                   'water':None,'water_index':0,'water_count':0,'water_key':None,'last_plot':None,
+                   'last_total':0,'last_stats':time.monotonic(),'actual_gain_text':'—','paused':False}
+        for name,value in state.items():
+            if name!='paused':setattr(self,name,value)
+        self.active=False;self.last_frequency_range=None;self.last_water_render=0.;self.row_items={}
+        controls=(self.backend,self.center,self.rate,self.span,self.gain,self.agc,self.offset,self.protocol,
+                  self.rx_frequency,self.channel_width,self.modulation,self.pause,self.search,self.filter_field,self.filter_value,self.bad,self.favorite_only)
+        blockers=[QtCore.QSignalBlocker(control) for control in controls]
+        self.protocol.clear();cls=self.plugins[self.band];self.protocol.addItem(cls.name,self.band)
+        self.rate.clear();rates=SAMPLE_RATES if self.band=='zigbee' else (1000000,2400000,4000000,8000000)
+        self.rate.addItems([f'{rate/1e6:g}' for rate in rates])
+        self.fc_slider.setRange(*( (2400,2485) if self.band=='zigbee' else ((430,440) if self.band=='ism433' else (863,870))))
+        self.restore();s=self.settings
+        self.rx_frequency.setRange(*( (430,440) if self.band=='ism433' else (863,870)))
+        self.rx_frequency.setValue(s.rx_frequency/1e6);self.channel_width.setValue(s.channel_width/1e3)
+        self.modulation.setCurrentIndex(max(0,self.modulation.findData(s.modulation)));self.decoder_ids.setText(s.decoder_ids);self.fsk_detector.setCurrentText(s.fsk_detector)
+        self.ism_presets.clear();self.ism_presets.addItem('RX personnalisée',None)
+        for frequency in ((433.42,433.92,434.42) if self.band=='ism433' else (868.1,868.3,868.95,869.525)):
+            self.ism_presets.addItem(f'RX {frequency:g} MHz',frequency)
+        self.pause.setChecked(state['paused']);self.search.setText(s.search);self.bad.setChecked(s.show_bad);self.favorite_only.setChecked(s.favorites_only)
+        self.filter_value.setText(s.filter_value)
+        del blockers
+        self.protocol_changed()
+        self.filter_field.setCurrentIndex(max(0,self.filter_field.findData(s.filter_field)))
+        self.ism_controls.setVisible(self.band!='zigbee');self.keys_button.setVisible(self.band=='zigbee');self.channel.setVisible(self.band=='zigbee')
+        self.table.horizontalHeader().setSortIndicator(1,QtCore.Qt.SortOrder.DescendingOrder if self.newest_first else QtCore.Qt.SortOrder.AscendingOrder)
+        self.table.horizontalHeaderItem(4).setText('CRC' if self.band=='zigbee' else 'Contrôle')
+        self.table.setColumnWidth(4,45 if self.band=='zigbee' else 90)
+        self.table.setRowCount(0);self.details.clear();self.raw.clear();self.refresh_table()
+        self.image.clear();self.curve.clear();self.water_palette=None
+        if self.last_plot is not None:
+            axis,power,ts,rate,center=self.last_plot;self.curve.setData(axis/1e6,power)
+            if self.water is not None and self.water_count:
+                indices=(self.water_index-1-np.linspace(0,self.water_count-1,min(600,self.water_count)).astype(int))%len(self.water)
+                self.image.setImage(self.water[indices],autoLevels=False,levels=None)
+                self.image.setLookupTable(pg.colormap.get(s.palette).getLookupTable(nPts=256));self.water_palette=s.palette
+                duration=max(.05,ts-self.water_times[indices[-1]])
+                self.image.setRect(QtCore.QRectF((center-rate/2)/1e6,0,rate/1e6,duration))
+                self.waterfall.setYRange(0,duration,padding=0)
+        self.decode_label.setText('Chaîne DSP à l’arrêt');self.level_label.setText('Niveaux I/Q : —');self.transfer_label.setText('Débit I/Q transféré : —');self.dsp_label.setText('Traitement DSP : —')
+        self.start_button.setEnabled(True);self.start_button.setText('Démarrer');self.apply_button.setEnabled(True);self.backend.setEnabled(True)
+        self.set_range();self.gain.setEnabled(not self.agc.isChecked());self.last_stats=0
+        resume=self.resume_after_switch;self.resume_after_switch=False
+        if resume:self.toggle()
+        self.statusBar().showMessage(f'{self.tabs.tabText(self.tabs.currentIndex())} · réglages restaurés')

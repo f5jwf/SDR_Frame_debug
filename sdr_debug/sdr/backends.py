@@ -35,6 +35,13 @@ class Settings:
     show_bad: bool=False
     favorites_only: bool=False
     newest_first: bool=False
+    workspace: str='zigbee'
+    rx_frequency: float=433920000
+    channel_width: float=200000
+    modulation: str='auto'
+    rtl433_path: str=''
+    decoder_ids: str=''
+    fsk_detector: str='classic'
 
     def public(self): return asdict(self)
 
@@ -134,7 +141,11 @@ def discover():
 
 
 def open_source(settings):
-    if settings.backend=='Démonstration': return Demo(settings)
+    if settings.backend=='Démonstration':
+        if settings.workspace!='zigbee':
+            from ..protocols.ism.demo import ISMDemo
+            return ISMDemo(settings)
+        return Demo(settings)
     if settings.backend=='Rejeu SigMF':
         from ..capture.iq import Replay
         return Replay(settings)
