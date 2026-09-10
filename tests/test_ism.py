@@ -5,7 +5,7 @@ import pytest
 from sdr_debug import config
 from sdr_debug.export.packets import export_frames
 from sdr_debug.protocols.ism.demo import nexus_wave,lacrosse_wave
-from sdr_debug.protocols.ism.plugin import ISM433Plugin,ISM868Plugin,executable,protocol_ids
+from sdr_debug.protocols.ism.plugin import ISM433Plugin,ISM868Plugin,UnknownOOKDetector,executable,protocol_ids
 
 
 @pytest.mark.parametrize('cls,wave,model,crc',[
@@ -20,7 +20,7 @@ def test_real_rtl433_iq_decode_across_blocks(cls,wave,model,crc,tmp_path):
         for i in range(0,len(iq),65536):
             frames.extend(p.process_iq(iq[i:i+65536],100+i/1e6));time.sleep(.02)
     finally:frames.extend(p.finish())
-    matching=[f for f in frames if f.fields['rtl_433']['model']==model]
+    matching=[f for f in frames if f.fields.get('rtl_433',{}).get('model')==model]
     assert matching
     frame=matching[0];fields=frame.fields['rtl_433']
     assert fields['temperature_C']==pytest.approx(25.1) and fields['humidity']==52
@@ -55,6 +55,19 @@ def test_modulation_filter_and_integrity_unknown():
 def test_decoder_selection_validation():
     assert protocol_ids('19, 76;19')==[19,76]
     with pytest.raises(ValueError):protocol_ids('19 -F mqtt://host')
+
+
+def test_unknown_ook_burst_is_kept_as_a_raw_frame():
+    detector=UnknownOOKDetector(1_000_000,868300000)
+    # A 25 ms OOK burst with 600 µs marks/spaces, followed by a delimiter.
+    wave=np.tile(np.r_[np.ones(600),np.zeros(600)],21).astype(np.complex64)*.08
+    frames=[]
+    for start in range(0,len(wave),1000):
+        frames.extend(detector.feed(wave[start:start+1000],100+start/1e6))
+    frames.extend(detector.feed(np.zeros(5000,np.complex64),100.03))
+    assert len(frames)==1
+    assert frames[0].protocol=='ism-ook-raw' and 'OOK inconnu' in frames[0].summary
+    assert frames[0].raw and frames[0].crc_ok is None
 
 
 def test_legacy_and_independent_settings(tmp_path,monkeypatch):

@@ -15,6 +15,43 @@ from ...dsp.resample import Resampler
 from ..base import Frame
 
 
+class UnknownOOKDetector:
+    """Keep strong, well-formed OOK bursts visible when no device decoder knows them."""
+    def __init__(self, rate, frequency):
+        self.rate=rate;self.frequency=frequency;self.state=False;self.run=0
+        self.segments=[];self.started=None
+
+    def _emit(self, timestamp):
+        parts=self.segments;self.segments=[];self.started=None
+        active=sum(length for state,length in parts if state)
+        duration=sum(length for _,length in parts)
+        if active<self.rate*.001 or duration<self.rate*.02 or len(parts)<10 or duration>self.rate*.5:return None
+        raw=b''.join(bytes([int(state)])+min(65535,round(length*1e6/self.rate)).to_bytes(2,'big') for state,length in parts[:256])
+        details={'PHY':{'modulation':'OOK/ASK','integrity':'non renseignée','raw_pulse_count':len(parts),
+                        'duration_ms':1000*duration/self.rate,'raw_bit_length':None},
+                 'generic_ook':{'segments_us':[(int(state),round(length*1e6/self.rate)) for state,length in parts[:256]]}}
+        return Frame(self.started if self.started is not None else timestamp,1,self.frequency,raw,None,float('nan'),details,
+                     f'OOK inconnu · {len(parts)} impulsions · {1000*duration/self.rate:.1f} ms',protocol='ism-ook-raw')
+
+    def feed(self, iq, timestamp):
+        noise=np.percentile(np.abs(iq),20); threshold=max(.002,noise*8)
+        levels=np.abs(iq)>threshold;frames=[];offset=0
+        changes=np.flatnonzero(levels[1:]!=levels[:-1])+1
+        for end in np.append(changes,len(levels)):
+            state=bool(levels[offset]);length=int(end-offset);offset=int(end)
+            if state and not self.segments:self.started=timestamp+(end-length)/self.rate
+            if self.segments or state:self.segments.append((state,length))
+            if not state and self.segments and length>=round(.003*self.rate):
+                # The final silence is a delimiter, not a part of the packet.
+                self.segments.pop();frame=self._emit(timestamp+end/self.rate)
+                if frame:frames.append(frame)
+        return frames
+
+    def finish(self, timestamp):
+        frame=self._emit(timestamp)
+        return [frame] if frame else []
+
+
 def executable(explicit=''):
     if explicit:
         path=Path(explicit).expanduser()
@@ -51,6 +88,7 @@ class ISMPlugin:
         self.fir=StreamingFIR(firwin(65,self.width/2,fs=self.rate).astype(np.float32))
         self.process=None;self.output=queue.Queue(2000);self.errors=deque(maxlen=8);self.origin=None
         self.carried=[];self.finished=False;self.output_overflow=False;self.input_error=None
+        self.generic_ook=UnknownOOKDetector(self.rate,self.frequency) if self.options.get('modulation','auto') in ('auto','ook') else None
         if self.options.get("fsk_detector","classic") not in ("classic","minmax","auto"):raise ValueError("Détecteur FSK inconnu")
         path=executable(self.options.get('rtl433_path',''))
         self.enabled=bool(path) and abs(self.frequency-center_frequency)+self.width/2<=min(sample_rate,self.options.get('rf_bandwidth') or sample_rate)/2
@@ -159,7 +197,9 @@ class ISMPlugin:
         try:self.input.put_nowait(np.asarray(iq,dtype='<c8').tobytes())
         except queue.Full:raise RuntimeError('rtl_433 ne suit plus le débit I/Q ; réduire la cadence')
         if self.input_error:raise RuntimeError('rtl_433 ne reçoit plus les I/Q : '+self.input_error)
-        return self._frames()
+        frames=self._frames()
+        if self.generic_ook is not None:frames.extend(self.generic_ook.feed(iq,timestamp-delay))
+        return frames
 
     def finish(self):
         if self.process is None or self.finished:return self._frames()
@@ -172,7 +212,9 @@ class ISMPlugin:
         for thread in self.readers+[self.writer]:thread.join(1)
         for stream in (self.process.stdin,self.process.stdout,self.process.stderr):
             if stream is not None:stream.close()
-        return self._frames()
+        frames=self._frames()
+        if self.generic_ook is not None:frames.extend(self.generic_ook.finish(self.origin or 0.))
+        return frames
 
     def reset_stream(self):
         frames=self.finish();self.carried=frames

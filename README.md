@@ -22,6 +22,8 @@ Il est déjà installé dans l’environnement de développement local. Ailleurs
 
 Le résultat ISM présente le modèle, l’identifiant et les mesures disponibles. Un CRC absent reste « non renseigné ». Les niveaux non fournis sont laissés absents ; le RSSI rtl_433 n’est pas assimilé aux dBFS du spectre. Certains décodeurs ne retournent pas les octets bruts : la vue l’indique et affiche leur résultat JSON. Les exports ISM sont JSON et CSV ; le PCAP reste réservé à Zigbee. Plusieurs décodeurs peuvent reconnaître le même signal : le numéro de protocole permet de les distinguer.
 
+Lorsqu’un paquet OOK/ASK net n’est reconnu par aucun décodeur, l’application l’affiche comme « OOK inconnu » avec sa durée, son nombre d’impulsions et leur représentation brute. Cela confirme la réception et permet d’identifier le protocole, sans inventer des mesures ou des champs de fabricant.
+
 La Démonstration utilise un signal Zigbee dans le premier onglet, un Nexus OOK dans le deuxième et un LaCrosse FSK dans le troisième. Ces signaux sont synthétiques et ne sont jamais émis. Les dispositifs réels nécessitent une antenne adaptée et une qualification RF séparée.
 
 La version est centralisée dans `sdr_debug/version.py`. Chaque livraison doit l’incrémenter et mettre à jour le changelog et le fichier Word de spécifications. Les tests multibandes couvrent les profils séparés, la bascule exclusive, le décodage du véritable processus rtl_433 sur I/Q synthétiques et les limites d’export.

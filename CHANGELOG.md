@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.3.0 — 10 septembre 2026
+
+- Les paquets OOK/ASK forts mais inconnus de rtl_433 sont conservés comme trames brutes avec leurs impulsions et leur durée, notamment sur 868,3 MHz.
+
 ## 0.2.2 — 10 septembre 2026
 
 - Une rupture de l'entrée I/Q de rtl_433 est désormais affichée explicitement au lieu de laisser le statut de décodage actif.
