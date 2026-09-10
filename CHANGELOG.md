@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.2.2 — 10 septembre 2026
+
+- Une rupture de l'entrée I/Q de rtl_433 est désormais affichée explicitement au lieu de laisser le statut de décodage actif.
+
 ## 0.2.1 — 10 septembre 2026
 
 - Le décodage ISM reçoit désormais l'I/Q brut ; la suppression de la composante centrale reste limitée à l'affichage FFT/waterfall afin de ne pas créer de creux au milieu du canal décodé.

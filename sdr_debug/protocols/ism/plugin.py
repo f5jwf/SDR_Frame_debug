@@ -50,7 +50,7 @@ class ISMPlugin:
         self.resampler=None if nominal==self.rate else Resampler(nominal,self.rate)
         self.fir=StreamingFIR(firwin(65,self.width/2,fs=self.rate).astype(np.float32))
         self.process=None;self.output=queue.Queue(2000);self.errors=deque(maxlen=8);self.origin=None
-        self.carried=[];self.finished=False;self.output_overflow=False
+        self.carried=[];self.finished=False;self.output_overflow=False;self.input_error=None
         if self.options.get("fsk_detector","classic") not in ("classic","minmax","auto"):raise ValueError("Détecteur FSK inconnu")
         path=executable(self.options.get('rtl433_path',''))
         self.enabled=bool(path) and abs(self.frequency-center_frequency)+self.width/2<=min(sample_rate,self.options.get('rf_bandwidth') or sample_rate)/2
@@ -93,7 +93,9 @@ class ISMPlugin:
                     count=stream.write(view)
                     if not count:raise BrokenPipeError('rtl_433 input closed')
                     view=view[count:]
-        except Exception as exc:self.errors.append(str(exc))
+        except Exception as exc:
+            self.input_error=str(exc)
+            self.errors.append('Entrée I/Q : '+self.input_error)
         finally:
             try:stream.close()
             except OSError:pass
@@ -142,6 +144,7 @@ class ISMPlugin:
     def process_iq(self,iq_block,timestamp):
         if not self.enabled:return []
         if self.output_overflow:raise RuntimeError("File de trames rtl_433 saturée ; résultats perdus")
+        if self.input_error:raise RuntimeError('rtl_433 ne reçoit plus les I/Q : '+self.input_error)
         iq=np.asarray(iq_block,dtype=np.complex64)
         if self.step:
             if self.oscillator is None or len(self.oscillator)!=len(iq):
@@ -155,6 +158,7 @@ class ISMPlugin:
         if self.process.poll() is not None:raise RuntimeError('rtl_433 arrêté : '+' / '.join(self.errors))
         try:self.input.put_nowait(np.asarray(iq,dtype='<c8').tobytes())
         except queue.Full:raise RuntimeError('rtl_433 ne suit plus le débit I/Q ; réduire la cadence')
+        if self.input_error:raise RuntimeError('rtl_433 ne reçoit plus les I/Q : '+self.input_error)
         return self._frames()
 
     def finish(self):
