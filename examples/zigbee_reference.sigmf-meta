@@ -1,0 +1,38 @@
+{
+  "global": {
+    "core:datatype": "cf32_le",
+    "core:sample_rate": 4000000,
+    "core:version": "1.2.5",
+    "core:description": "SDR Frame Debug RX",
+    "sdr_debug:settings": {
+      "backend": "D\u00e9monstration",
+      "uri": "ip:192.168.2.1",
+      "center": 2425000000.0,
+      "sample_rate": 4000000,
+      "gain": 30,
+      "agc": false,
+      "offset": 0,
+      "channel": 15,
+      "span": 4000000.0,
+      "replay": "",
+      "protocol": "zigbee",
+      "fft_size": 2048,
+      "window": "hann",
+      "average": 0.3,
+      "waterfall_ms": 50,
+      "history": 30,
+      "palette": "viridis",
+      "floor": -90,
+      "ceiling": 0,
+      "dc": true
+    }
+  },
+  "captures": [
+    {
+      "core:sample_start": 0,
+      "core:frequency": 2425000000.0,
+      "core:datetime": "2026-09-08T10:00:00+00:00"
+    }
+  ],
+  "annotations": []
+}

@@ -1,0 +1,16 @@
+{
+  "seconds": 15.0,
+  "sample_rate_msps": 4,
+  "channel_offset_mhz": 1,
+  "counts": {
+    "total": 67,
+    "ok": 67,
+    "bad": 0,
+    "dropped_blocks": 1383,
+    "dropped_frames": 0,
+    "restarts": 0
+  },
+  "gui_max_ms": 134.78960000065854,
+  "workers_stopped": true,
+  "queue_at_end": 0
+}

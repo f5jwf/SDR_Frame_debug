@@ -1,0 +1,196 @@
+{
+  "metadata": {
+    "source": "Synthetic half-sine O-QPSK; 18 kHz CFO; seed 802154"
+  },
+  "frames": [
+    {
+      "timestamp": 1788861600.0002499,
+      "channel": 15,
+      "frequency": 2425000000.0,
+      "raw": "4188003412000078560800000078561e0000010600040101000100006c8a",
+      "crc_ok": true,
+      "level": -6.092796507319164,
+      "fields": {
+        "PHY": {
+          "PHR": 30,
+          "length": 30,
+          "FCS": "OK",
+          "CFO_Hz": 17952
+        },
+        "MAC": {
+          "frame_control": "0x8841",
+          "type": "Data",
+          "security": false,
+          "version": 0,
+          "pan_compression": true,
+          "sequence": 0,
+          "pan": "0x1234",
+          "destination": "0000",
+          "source_pan": "0x1234",
+          "source": "5678",
+          "payload": "0800000078561e000001060004010100010000"
+        },
+        "NWK": {
+          "frame_control": "0x0008",
+          "type": 0,
+          "version": 2,
+          "route_discovery": 0,
+          "destination": "0000",
+          "source": "5678",
+          "radius": 30,
+          "sequence": 0,
+          "security": false
+        },
+        "APS": {
+          "frame_control": "0x00",
+          "type": 0,
+          "delivery_mode": 0,
+          "security": false,
+          "destination_endpoint": 1,
+          "cluster": "0x0006",
+          "cluster_name": "On/Off",
+          "profile": "0x0104",
+          "source_endpoint": 1,
+          "counter": 0
+        },
+        "ZCL": {
+          "frame_control": "0x01",
+          "direction": 0,
+          "manufacturer_specific": false,
+          "transaction_sequence": 0,
+          "command": "0x00",
+          "command_name": "Off",
+          "payload": ""
+        }
+      },
+      "summary": "Data 5678 → 0000 On/Off Off",
+      "favorite": false
+    },
+    {
+      "timestamp": 1788861600.0026524,
+      "channel": 15,
+      "frequency": 2425000000.0,
+      "raw": "4188013412000078560800000078561e01000106000401010101010183d6",
+      "crc_ok": true,
+      "level": -6.098074482392699,
+      "fields": {
+        "PHY": {
+          "PHR": 30,
+          "length": 30,
+          "FCS": "OK",
+          "CFO_Hz": 17962
+        },
+        "MAC": {
+          "frame_control": "0x8841",
+          "type": "Data",
+          "security": false,
+          "version": 0,
+          "pan_compression": true,
+          "sequence": 1,
+          "pan": "0x1234",
+          "destination": "0000",
+          "source_pan": "0x1234",
+          "source": "5678",
+          "payload": "0800000078561e010001060004010101010101"
+        },
+        "NWK": {
+          "frame_control": "0x0008",
+          "type": 0,
+          "version": 2,
+          "route_discovery": 0,
+          "destination": "0000",
+          "source": "5678",
+          "radius": 30,
+          "sequence": 1,
+          "security": false
+        },
+        "APS": {
+          "frame_control": "0x00",
+          "type": 0,
+          "delivery_mode": 0,
+          "security": false,
+          "destination_endpoint": 1,
+          "cluster": "0x0006",
+          "cluster_name": "On/Off",
+          "profile": "0x0104",
+          "source_endpoint": 1,
+          "counter": 1
+        },
+        "ZCL": {
+          "frame_control": "0x01",
+          "direction": 0,
+          "manufacturer_specific": false,
+          "transaction_sequence": 1,
+          "command": "0x01",
+          "command_name": "On",
+          "payload": ""
+        }
+      },
+      "summary": "Data 5678 → 0000 On/Off On",
+      "favorite": false
+    },
+    {
+      "timestamp": 1788861600.005055,
+      "channel": 15,
+      "frequency": 2425000000.0,
+      "raw": "4188023412000078560800000078561e020001060004010102010202b233",
+      "crc_ok": true,
+      "level": -6.0977696016546465,
+      "fields": {
+        "PHY": {
+          "PHR": 30,
+          "length": 30,
+          "FCS": "OK",
+          "CFO_Hz": 17959
+        },
+        "MAC": {
+          "frame_control": "0x8841",
+          "type": "Data",
+          "security": false,
+          "version": 0,
+          "pan_compression": true,
+          "sequence": 2,
+          "pan": "0x1234",
+          "destination": "0000",
+          "source_pan": "0x1234",
+          "source": "5678",
+          "payload": "0800000078561e020001060004010102010202"
+        },
+        "NWK": {
+          "frame_control": "0x0008",
+          "type": 0,
+          "version": 2,
+          "route_discovery": 0,
+          "destination": "0000",
+          "source": "5678",
+          "radius": 30,
+          "sequence": 2,
+          "security": false
+        },
+        "APS": {
+          "frame_control": "0x00",
+          "type": 0,
+          "delivery_mode": 0,
+          "security": false,
+          "destination_endpoint": 1,
+          "cluster": "0x0006",
+          "cluster_name": "On/Off",
+          "profile": "0x0104",
+          "source_endpoint": 1,
+          "counter": 2
+        },
+        "ZCL": {
+          "frame_control": "0x01",
+          "direction": 0,
+          "manufacturer_specific": false,
+          "transaction_sequence": 2,
+          "command": "0x02",
+          "command_name": "Toggle",
+          "payload": ""
+        }
+      },
+      "summary": "Data 5678 → 0000 On/Off Toggle",
+      "favorite": false
+    }
+  ]
+}

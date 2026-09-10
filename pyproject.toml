@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sdr-frame-debug"
+version = "0.1.0"
+description = "Analyseur SDR et Zigbee en réception uniquement"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26,<3", "scipy>=1.12,<2", "numba>=0.67,<0.68", "PySide6>=6.7,<7", "pyqtgraph>=0.13,<1", "cryptography>=42"]
+
+[project.optional-dependencies]
+hardware = ["pyadi-iio>=0.0.17", "pyrtlsdr>=0.3"]
+dev = ["pytest>=8", "pyinstaller>=6"]
+
+[project.scripts]
+sdr-frame-debug = "sdr_debug.app:main"
+
+[tool.setuptools.packages.find]
+include = ["sdr_debug*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

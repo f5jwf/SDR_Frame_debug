@@ -1,0 +1,25 @@
+{
+  "seconds": 60.0,
+  "sample_rate_msps": 4,
+  "channel_offset_mhz": 1,
+  "counts": {
+    "total": 736,
+    "ok": 736,
+    "bad": 0,
+    "dropped_blocks": 12,
+    "dropped_frames": 0,
+    "restarts": 0
+  },
+  "gui_max_ms": 126.09860000156914,
+  "workers_stopped": true,
+  "queue_at_end": 0,
+  "performance": {
+    "dsp_ms_per_block": 20.006822580692262,
+    "dsp_max_ms": 24.863400001777336,
+    "signal_ms_per_block": 32.768,
+    "queue_blocks": 0,
+    "queue_capacity": 32
+  },
+  "max_queue_blocks": 32,
+  "startup_seconds": 5.639999999999418
+}
