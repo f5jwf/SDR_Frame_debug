@@ -28,5 +28,11 @@ def export_frames(path, frames, metadata=None):
             columns=['timestamp','protocol','channel','frequency','level','crc_ok','summary','raw','favorite']
             writer=csv.DictWriter(f,columns,extrasaction='ignore'); writer.writeheader()
             for frame in frames: writer.writerow(record(frame))
+    elif ext=='.hex':
+        # One complete decoded frame per line.  This deliberately contains only
+        # hexadecimal bytes so it can be pasted into analysis tools directly.
+        with path.open('w',encoding='ascii',newline='\n') as f:
+            for frame in frames:
+                if frame.raw:f.write(frame.raw.hex().upper()+'\n')
     else:
         path.write_text(json.dumps({'metadata':metadata or {},'frames':[record(f) for f in frames]},indent=2,ensure_ascii=False),encoding='utf8')

@@ -155,10 +155,11 @@ class MainWindow(W.QMainWindow):
         replay=W.QPushButton('Ouvrir I/Q'); replay.clicked.connect(self.choose_replay)
         self.record=W.QPushButton('Enregistrer I/Q'); self.record.setCheckable(True); self.record.clicked.connect(self.record_iq)
         export=W.QPushButton('Exporter trames'); export.clicked.connect(self.export)
+        export_hex=W.QPushButton('Sauver hex'); export_hex.setToolTip('Enregistre les octets bruts des trames visibles, une trame hexadécimale par ligne.'); export_hex.clicked.connect(lambda:self.export(hexadecimal=True))
         session=W.QPushButton('Sauver session'); session.clicked.connect(lambda:self.export(session=True))
         prefs=W.QPushButton('FFT / Waterfall'); prefs.clicked.connect(self.preferences)
         keys=W.QPushButton('Clés Zigbee'); keys.clicked.connect(self.keys_dialog);self.keys_button=keys
-        for button in (replay,self.record,export,session,prefs,keys): tools.addWidget(button)
+        for button in (replay,self.record,export,export_hex,session,prefs,keys): tools.addWidget(button)
         tools.addStretch(); self.key_options={}
         self.setStyleSheet('QMainWindow,QWidget{background:#111b29;color:#dce5f2;} QLineEdit,QComboBox,QSpinBox,QDoubleSpinBox,QPlainTextEdit,QTreeWidget,QTableWidget{background:#172438;selection-background-color:#28566b;} QPushButton{background:#243a50;border:1px solid #39536e;padding:7px;border-radius:4px;} QPushButton:hover{background:#31516c;} QPushButton:checked{background:#805820;} QHeaderView::section{background:#24364c;padding:4px;} QCheckBox::indicator{width:18px;height:18px;border:1px solid #8196ae;border-radius:3px;background:#172438;} QCheckBox::indicator:checked{background:#39bda4;border:2px solid #a1ffed;} QTabBar::tab{background:#1a2a3d;padding:9px 18px;border:1px solid #39536e;margin-right:3px;} QTabBar::tab:selected{background:#24536b;color:#ffffff;border-bottom:3px solid #61d4ff;} QTabBar::tab:hover{background:#31516c;} QToolTip{background:#24364c;color:white;}')
 
@@ -365,9 +366,12 @@ class MainWindow(W.QMainWindow):
             self.raw.setPlainText('Octets bruts non fournis par ce décodeur. Résultat reçu :\n'+json.dumps(frame.fields.get('rtl_433',{}),ensure_ascii=False,indent=2));return
         self.raw.setPlainText('\n'.join(f'{i:04x}  '+frame.raw[i:i+16].hex(' ').ljust(47)+'  '+''.join(chr(b) if 32<=b<127 else '.' for b in frame.raw[i:i+16]) for i in range(0,len(frame.raw),16)))
 
-    def export(self,checked=False,session=False):
-        path,_=W.QFileDialog.getSaveFileName(self,'Sauver session' if session else 'Exporter les trames visibles',self.settings.capture_dir,'JSON (*.json)' if session else 'JSON (*.json);;CSV (*.csv);;Wireshark PCAP (*.pcap)')
+    def export(self,checked=False,session=False,hexadecimal=False):
+        title='Sauver les trames visibles au format hexadécimal' if hexadecimal else ('Sauver session' if session else 'Exporter les trames visibles')
+        filters='Fichier hexadécimal (*.hex)' if hexadecimal else ('JSON (*.json)' if session else 'JSON (*.json);;CSV (*.csv);;Wireshark PCAP (*.pcap)')
+        path,_=W.QFileDialog.getSaveFileName(self,title,self.settings.capture_dir,filters)
         if not path:return
+        if hexadecimal and not Path(path).suffix:path+='.hex'
         self.settings.capture_dir=str(Path(path).parent)
         frames=list(self.packets)+list(self.pending) if session else [f for f in self.packets if self.matches(f)]
         metadata={'settings':self.settings.public(),'counters':dict(self.engine.counts)} if session else {}

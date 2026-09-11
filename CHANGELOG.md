@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.4.0 — 11 septembre 2026
+
+- Bouton Sauver hex dans chaque espace de travail ; le fichier `.hex` contient une trame brute par ligne.
+
 ## 0.3.0 — 10 septembre 2026
 
 - Les paquets OOK/ASK forts mais inconnus de rtl_433 sont conservés comme trames brutes avec leurs impulsions et leur durée, notamment sur 868,3 MHz.

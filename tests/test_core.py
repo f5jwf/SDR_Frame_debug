@@ -121,6 +121,8 @@ def test_iq_roundtrip_and_exports(tmp_path):
     p=ZigbeePlugin();p.configure(FS,2425e6,2425e6,{})
     frames=p.process_iq(out,ts);assert [f.raw for f in frames]==[RAW]
     for ext in ['json','csv','pcap']:export_frames(tmp_path/f'frames.{ext}',frames,settings.public())
+    export_frames(tmp_path/'frames.hex',frames)
+    assert (tmp_path/'frames.hex').read_text(encoding='ascii').splitlines()==[frame.raw.hex().upper() for frame in frames]
     data=(tmp_path/'frames.pcap').read_bytes();assert struct.unpack('<I',data[20:24])[0]==195
     assert data[40:]==RAW
     with pytest.raises(FileExistsError):Recorder(path,settings)
