@@ -98,10 +98,11 @@ class MainWindow(W.QMainWindow):
         self.ism_presets=W.QComboBox();self.ism_presets.activated.connect(lambda i:self.rx_frequency.setValue(self.ism_presets.itemData(i)) if self.ism_presets.itemData(i) is not None else None)
         self.fsk_detector=W.QComboBox();self.fsk_detector.addItems(['classic','minmax','auto'])
         self.fsk_detector.setToolTip('Algorithme de détection FSK de rtl_433 ; classic est validé sur la démonstration LaCrosse.')
+        self.pro501_enabled=W.QCheckBox('CERBERUS PRO-501');self.pro501_enabled.setToolTip('Décodeur OOK/PWM adaptatif pour les détecteurs Selectronic CERBERUS PRO-501 à 868 MHz.')
         self.decoder_path=W.QPushButton('Moteur rtl_433…');self.decoder_path.clicked.connect(self.choose_decoder)
         for i,(label,widget) in enumerate([('RX',self.rx_frequency),('Largeur',self.channel_width),('Modulation',self.modulation)]):
             ism.addWidget(W.QLabel(label),0,2*i);ism.addWidget(widget,0,2*i+1)
-        ism.addWidget(self.ism_presets,0,6);ism.addWidget(self.decoder_ids,1,0,1,4);ism.addWidget(W.QLabel('Détecteur FSK'),1,4);ism.addWidget(self.fsk_detector,1,5);ism.addWidget(self.decoder_path,1,6)
+        ism.addWidget(self.ism_presets,0,6);ism.addWidget(self.decoder_ids,1,0,1,4);ism.addWidget(W.QLabel('Détecteur FSK'),1,4);ism.addWidget(self.fsk_detector,1,5);ism.addWidget(self.pro501_enabled,1,6);ism.addWidget(self.decoder_path,1,7)
         layout.addWidget(self.ism_controls);self.ism_controls.hide()
         self.rx_label=W.QLabel(); layout.addWidget(self.rx_label)
         self.level_label=W.QLabel('Niveaux en dBFS, non calibrés en dBm · Gain matériel : —'); layout.addWidget(self.level_label)
@@ -180,7 +181,7 @@ class MainWindow(W.QMainWindow):
         s.workspace=self.band
         if self.band!='zigbee':
             s.rx_frequency=self.rx_frequency.value()*1e6;s.channel_width=self.channel_width.value()*1e3
-            s.modulation=self.modulation.currentData();s.decoder_ids=self.decoder_ids.text().strip();s.fsk_detector=self.fsk_detector.currentText()
+            s.modulation=self.modulation.currentData();s.decoder_ids=self.decoder_ids.text().strip();s.fsk_detector=self.fsk_detector.currentText();s.pro501_enabled=self.pro501_enabled.isChecked()
         return s
 
     def protocol_changed(self,*args):
@@ -517,7 +518,7 @@ class MainWindow(W.QMainWindow):
     def decoder_options(self):
         if self.band=='zigbee':return dict(self.key_options)
         s=self.current()
-        return {key:getattr(s,key) for key in ('rx_frequency','channel_width','modulation','rtl433_path','decoder_ids','fsk_detector')}
+        return {key:getattr(s,key) for key in ('rx_frequency','channel_width','modulation','rtl433_path','decoder_ids','fsk_detector','pro501_enabled')}
 
     def choose_decoder(self):
         from ..protocols.ism.plugin import executable
@@ -556,7 +557,7 @@ class MainWindow(W.QMainWindow):
             if name!='paused':setattr(self,name,value)
         self.active=False;self.last_frequency_range=None;self.last_water_render=0.;self.row_items={}
         controls=(self.backend,self.center,self.rate,self.span,self.gain,self.agc,self.offset,self.protocol,
-                  self.rx_frequency,self.channel_width,self.modulation,self.pause,self.search,self.filter_field,self.filter_value,self.bad,self.favorite_only)
+                  self.rx_frequency,self.channel_width,self.modulation,self.pro501_enabled,self.pause,self.search,self.filter_field,self.filter_value,self.bad,self.favorite_only)
         blockers=[QtCore.QSignalBlocker(control) for control in controls]
         self.protocol.clear();cls=self.plugins[self.band];self.protocol.addItem(cls.name,self.band)
         self.rate.clear();rates=SAMPLE_RATES if self.band=='zigbee' else (1000000,2400000,4000000,8000000)
@@ -565,7 +566,7 @@ class MainWindow(W.QMainWindow):
         self.restore();s=self.settings
         self.rx_frequency.setRange(*( (430,440) if self.band=='ism433' else (863,870)))
         self.rx_frequency.setValue(s.rx_frequency/1e6);self.channel_width.setValue(s.channel_width/1e3)
-        self.modulation.setCurrentIndex(max(0,self.modulation.findData(s.modulation)));self.decoder_ids.setText(s.decoder_ids);self.fsk_detector.setCurrentText(s.fsk_detector)
+        self.modulation.setCurrentIndex(max(0,self.modulation.findData(s.modulation)));self.decoder_ids.setText(s.decoder_ids);self.fsk_detector.setCurrentText(s.fsk_detector);self.pro501_enabled.setChecked(s.pro501_enabled);self.pro501_enabled.setVisible(self.band=='ism868')
         self.ism_presets.clear();self.ism_presets.addItem('RX personnalisée',None)
         for frequency in ((433.42,433.92,434.42) if self.band=='ism433' else (868.1,868.3,868.95,869.525)):
             self.ism_presets.addItem(f'RX {frequency:g} MHz',frequency)

@@ -13,6 +13,7 @@ from scipy.signal import firwin
 from ...dsp.fir import StreamingFIR
 from ...dsp.resample import Resampler
 from ..base import Frame
+from .cerberus_pro501 import PRO501_DEDUP_MS, decode_pro501
 
 
 class UnknownOOKDetector:
@@ -43,6 +44,46 @@ class UnknownOOKDetector:
             if self.segments or state:self.segments.append((state,length))
             if not state and self.segments and length>=round(.003*self.rate):
                 # The final silence is a delimiter, not a part of the packet.
+                self.segments.pop();frame=self._emit(timestamp+end/self.rate)
+                if frame:frames.append(frame)
+        return frames
+
+    def finish(self, timestamp):
+        frame=self._emit(timestamp)
+        return [frame] if frame else []
+
+
+class CerberusPRO501Detector:
+    """Turn OOK envelope segments into one PRO-501 event per radio burst."""
+    def __init__(self, rate, frequency):
+        self.rate=rate;self.frequency=frequency;self.segments=[];self.started=None
+        self.last_key=None;self.last_timestamp=-float('inf')
+
+    def _emit(self, timestamp):
+        edges=self.segments;self.segments=[];started=self.started;self.started=None
+        result=decode_pro501([(int(level),round(length*1e6/self.rate)) for level,length in edges])
+        if result is None or not result.valid:return None
+        key=result.sensor_key+result.raw_bits
+        if key==self.last_key and timestamp-self.last_timestamp<PRO501_DEDUP_MS/1000:return None
+        self.last_key=key;self.last_timestamp=timestamp
+        raw=result.raw_u64.to_bytes(8,'big')
+        details={'PHY':{'modulation':'OOK/ASK PWM','channel_width_Hz':None,'raw_bit_length':64,'integrity':'non renseignée'},
+                 'cerberus_pro501':{'valid':True,'raw_bits':result.raw_bits,'repeats':result.repeats,
+                    'frame_confidence':result.frame_confidence,'symbol_confidence':result.symbol_confidence,
+                    'sensor_key':result.sensor_key,'event':result.event,'battery':result.battery,
+                    'timing_us':result.timing_us,'ratio_short':result.ratio_short,'ratio_long':result.ratio_long}}
+        summary=f'CERBERUS PRO-501 · {result.event} · capteur {result.sensor_key} · {result.repeats} répétitions · confiance {result.frame_confidence:.0%}'
+        return Frame(started if started is not None else timestamp,1,self.frequency,raw,None,float('nan'),details,summary,protocol='cerberus-pro501')
+
+    def feed(self, iq, timestamp):
+        noise=np.percentile(np.abs(iq),20);threshold=max(.002,noise*8)
+        levels=np.abs(iq)>threshold;frames=[];offset=0
+        changes=np.flatnonzero(levels[1:]!=levels[:-1])+1
+        for end in np.append(changes,len(levels)):
+            state=bool(levels[offset]);length=int(end-offset);offset=int(end)
+            if state and not self.segments:self.started=timestamp+(end-length)/self.rate
+            if self.segments or state:self.segments.append((state,length))
+            if not state and self.segments and length>=round(.010*self.rate):
                 self.segments.pop();frame=self._emit(timestamp+end/self.rate)
                 if frame:frames.append(frame)
         return frames
@@ -89,10 +130,11 @@ class ISMPlugin:
         self.process=None;self.output=queue.Queue(2000);self.errors=deque(maxlen=8);self.origin=None
         self.carried=[];self.finished=False;self.output_overflow=False;self.input_error=None
         self.generic_ook=UnknownOOKDetector(self.rate,self.frequency) if self.options.get('modulation','auto') in ('auto','ook') else None
+        self.pro501=CerberusPRO501Detector(self.rate,self.frequency) if self.id=='ism868' and self.options.get('pro501_enabled',True) and self.options.get('modulation','auto') in ('auto','ook') else None
         if self.options.get("fsk_detector","classic") not in ("classic","minmax","auto"):raise ValueError("Détecteur FSK inconnu")
         path=executable(self.options.get('rtl433_path',''))
         self.enabled=bool(path) and abs(self.frequency-center_frequency)+self.width/2<=min(sample_rate,self.options.get('rf_bandwidth') or sample_rate)/2
-        if not path:self.status='Spectre actif · rtl_433 absent : installer via tools/install_rtl433.py ou sélectionner son exécutable'
+        if not path:self.status='Spectre actif · rtl_433 absent ; décodeur CERBERUS PRO-501 OOK disponible sur 868 MHz'
         elif not self.enabled:self.status='Spectre actif · Canal hors bande : recentrer sur RX'
         else:self.status='Décodage ISM actif · rtl_433 · OOK/ASK et FSK · appareils reconnus uniquement'
         self.path=path
@@ -180,9 +222,8 @@ class ISMPlugin:
         return frames
 
     def process_iq(self,iq_block,timestamp):
-        if not self.enabled:return []
-        if self.output_overflow:raise RuntimeError("File de trames rtl_433 saturée ; résultats perdus")
-        if self.input_error:raise RuntimeError('rtl_433 ne reçoit plus les I/Q : '+self.input_error)
+        if self.enabled and self.output_overflow:raise RuntimeError("File de trames rtl_433 saturée ; résultats perdus")
+        if self.enabled and self.input_error:raise RuntimeError('rtl_433 ne reçoit plus les I/Q : '+self.input_error)
         iq=np.asarray(iq_block,dtype=np.complex64)
         if self.step:
             if self.oscillator is None or len(self.oscillator)!=len(iq):
@@ -192,17 +233,30 @@ class ISMPlugin:
         delay=32/self.rate
         if self.resampler is not None:iq=self.resampler.process(iq);delay+=self.resampler.delay
         iq,_=self.fir.process(iq)
-        if self.process is None:self._start(timestamp-delay)
-        if self.process.poll() is not None:raise RuntimeError('rtl_433 arrêté : '+' / '.join(self.errors))
-        try:self.input.put_nowait(np.asarray(iq,dtype='<c8').tobytes())
-        except queue.Full:raise RuntimeError('rtl_433 ne suit plus le débit I/Q ; réduire la cadence')
-        if self.input_error:raise RuntimeError('rtl_433 ne reçoit plus les I/Q : '+self.input_error)
-        frames=self._frames()
-        if self.generic_ook is not None:frames.extend(self.generic_ook.feed(iq,timestamp-delay))
+        frames=[]
+        if self.enabled:
+            if self.process is None:self._start(timestamp-delay)
+            if self.process.poll() is not None:raise RuntimeError('rtl_433 arrêté : '+' / '.join(self.errors))
+            try:self.input.put_nowait(np.asarray(iq,dtype='<c8').tobytes())
+            except queue.Full:raise RuntimeError('rtl_433 ne suit plus le débit I/Q ; réduire la cadence')
+            if self.input_error:raise RuntimeError('rtl_433 ne reçoit plus les I/Q : '+self.input_error)
+            frames=self._frames()
+        pro501_frames=self.pro501.feed(iq,timestamp-delay) if self.pro501 is not None else []
+        if self.generic_ook is not None:
+            raw_frames=self.generic_ook.feed(iq,timestamp-delay)
+            # A recognised burst supersedes its generic OOK representation.
+            if pro501_frames:raw_frames=[frame for frame in raw_frames if frame.protocol!='ism-ook-raw']
+            frames.extend(raw_frames)
+        frames.extend(pro501_frames)
         return frames
 
     def finish(self):
-        if self.process is None or self.finished:return self._frames()
+        if self.process is None or self.finished:
+            frames=self._frames()
+            pro501_frames=self.pro501.finish(self.origin or 0.) if self.pro501 is not None else []
+            if self.generic_ook is not None and not pro501_frames:frames.extend(self.generic_ook.finish(self.origin or 0.))
+            frames.extend(pro501_frames)
+            return frames
         self.finished=True
         try:
             self.input.put(None,timeout=1)
@@ -213,7 +267,12 @@ class ISMPlugin:
         for stream in (self.process.stdin,self.process.stdout,self.process.stderr):
             if stream is not None:stream.close()
         frames=self._frames()
-        if self.generic_ook is not None:frames.extend(self.generic_ook.finish(self.origin or 0.))
+        pro501_frames=self.pro501.finish(self.origin or 0.) if self.pro501 is not None else []
+        if self.generic_ook is not None:
+            raw_frames=self.generic_ook.finish(self.origin or 0.)
+            if pro501_frames:raw_frames=[]
+            frames.extend(raw_frames)
+        frames.extend(pro501_frames)
         return frames
 
     def reset_stream(self):

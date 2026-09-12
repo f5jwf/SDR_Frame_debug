@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.5.0 — 12 septembre 2026
+
+- Décodeur OOK/PWM adaptatif CERBERUS / Selectronic PRO-501 dans l’onglet ISM 868 MHz : déglitchage, regroupement des ratios, consensus 64 bits et anti-doublon de rafale.
+
 ## 0.4.0 — 11 septembre 2026
 
 - Bouton Sauver hex dans chaque espace de travail ; le fichier `.hex` contient une trame brute par ligne.
