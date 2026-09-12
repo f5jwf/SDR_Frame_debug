@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.5.2 — 12 septembre 2026
+
+- Liste déroulante des décodeurs dans l’onglet ISM 868 MHz : Automatique, CERBERUS PRO-501 ou rtl_433 uniquement.
+
 ## 0.5.1 — 12 septembre 2026
 
 - La première trame visible est automatiquement sélectionnée et tous ses champs sont développés dans le panneau de détail.

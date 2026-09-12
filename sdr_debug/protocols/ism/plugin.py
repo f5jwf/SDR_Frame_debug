@@ -129,12 +129,13 @@ class ISMPlugin:
         self.fir=StreamingFIR(firwin(65,self.width/2,fs=self.rate).astype(np.float32))
         self.process=None;self.output=queue.Queue(2000);self.errors=deque(maxlen=8);self.origin=None
         self.carried=[];self.finished=False;self.output_overflow=False;self.input_error=None
-        self.generic_ook=UnknownOOKDetector(self.rate,self.frequency) if self.options.get('modulation','auto') in ('auto','ook') else None
-        self.pro501=CerberusPRO501Detector(self.rate,self.frequency) if self.id=='ism868' and self.options.get('pro501_enabled',True) and self.options.get('modulation','auto') in ('auto','ook') else None
+        selected_decoder=self.options.get('ism_decoder','auto')
+        self.generic_ook=UnknownOOKDetector(self.rate,self.frequency) if selected_decoder!='pro501' and self.options.get('modulation','auto') in ('auto','ook') else None
+        self.pro501=CerberusPRO501Detector(self.rate,self.frequency) if self.id=='ism868' and selected_decoder in ('auto','pro501') and self.options.get('modulation','auto') in ('auto','ook') else None
         if self.options.get("fsk_detector","classic") not in ("classic","minmax","auto"):raise ValueError("Détecteur FSK inconnu")
         path=executable(self.options.get('rtl433_path',''))
-        self.enabled=bool(path) and abs(self.frequency-center_frequency)+self.width/2<=min(sample_rate,self.options.get('rf_bandwidth') or sample_rate)/2
-        if not path:self.status='Spectre actif · rtl_433 absent ; décodeur CERBERUS PRO-501 OOK disponible sur 868 MHz'
+        self.enabled=bool(path) and selected_decoder!='pro501' and abs(self.frequency-center_frequency)+self.width/2<=min(sample_rate,self.options.get('rf_bandwidth') or sample_rate)/2
+        if not path:self.status=('Spectre actif · rtl_433 absent ; décodeur CERBERUS PRO-501 OOK disponible sur 868 MHz' if self.pro501 else 'Spectre actif · rtl_433 absent : installer via tools/install_rtl433.py ou sélectionner son exécutable')
         elif not self.enabled:self.status='Spectre actif · Canal hors bande : recentrer sur RX'
         else:self.status='Décodage ISM actif · rtl_433 · OOK/ASK et FSK · appareils reconnus uniquement'
         self.path=path

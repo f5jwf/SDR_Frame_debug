@@ -42,7 +42,7 @@ class Settings:
     rtl433_path: str=''
     decoder_ids: str=''
     fsk_detector: str='classic'
-    pro501_enabled: bool=True
+    ism_decoder: str='auto'
 
     def public(self): return asdict(self)
 
