@@ -223,7 +223,7 @@ Elle peut être terminée après :
 Valeur de départ possible :
 
 ```text
-burst_timeout ~= 10 ms
+burst_timeout ~= 30 ms
 ```
 
 Mais ce timeout doit rester configurable.

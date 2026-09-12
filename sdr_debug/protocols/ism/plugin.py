@@ -58,6 +58,10 @@ class CerberusPRO501Detector:
     def __init__(self, rate, frequency):
         self.rate=rate;self.frequency=frequency;self.segments=[];self.started=None
         self.last_key=None;self.last_timestamp=-float('inf')
+        # The transmitter leaves inter-repeat silences longer than the 10 ms
+        # initial specification value.  Keep them in one radio burst so the
+        # 64-bit consensus can use all repetitions.
+        self.burst_timeout_samples=round(.030*rate)
 
     def _emit(self, timestamp):
         edges=self.segments;self.segments=[];started=self.started;self.started=None
@@ -83,7 +87,7 @@ class CerberusPRO501Detector:
             state=bool(levels[offset]);length=int(end-offset);offset=int(end)
             if state and not self.segments:self.started=timestamp+(end-length)/self.rate
             if self.segments or state:self.segments.append((state,length))
-            if not state and self.segments and length>=round(.010*self.rate):
+            if not state and self.segments and length>=self.burst_timeout_samples:
                 self.segments.pop();frame=self._emit(timestamp+end/self.rate)
                 if frame:frames.append(frame)
         return frames

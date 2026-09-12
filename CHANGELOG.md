@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.5.3 — 12 septembre 2026
+
+- Rallongement de la fenêtre de rafale CERBERUS PRO-501 pour conserver les répétitions nécessaires au consensus.
+
 ## 0.5.2 — 12 septembre 2026
 
 - Liste déroulante des décodeurs dans l’onglet ISM 868 MHz : Automatique, CERBERUS PRO-501 ou rtl_433 uniquement.
