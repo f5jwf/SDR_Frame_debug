@@ -319,6 +319,11 @@ class MainWindow(W.QMainWindow):
         self.table.blockSignals(False)
         if selected is not None and id(selected) in self.row_items:
             self.table.selectRow(self.row_items[id(selected)].row())
+        elif self.table.rowCount():
+            # Keep the decoded details useful while live frames arrive: the
+            # first visible frame is selected until the user chooses another.
+            self.table.selectRow(0)
+        self.show_packet()
 
     def add_row(self,frame):
         # Insert by full-resolution timestamp, including during replay or resume.
@@ -362,7 +367,7 @@ class MainWindow(W.QMainWindow):
                 for k,v in enumerate(value):branch(item,k,v)
         branch(self.details,'Réception',{'date':datetime.fromtimestamp(frame.timestamp).isoformat(timespec='milliseconds'),'canal':frame.channel,'fréquence':frame.frequency,'dBFS':frame.level if np.isfinite(frame.level) else 'non fourni','longueur':len(frame.raw) if frame.raw else 'non fournie'})
         for key,value in frame.fields.items():branch(self.details,key,value)
-        self.details.expandToDepth(0)
+        self.details.expandAll()
         if frame.protocol!='zigbee' and not frame.raw:
             self.raw.setPlainText('Octets bruts non fournis par ce décodeur. Résultat reçu :\n'+json.dumps(frame.fields.get('rtl_433',{}),ensure_ascii=False,indent=2));return
         self.raw.setPlainText('\n'.join(f'{i:04x}  '+frame.raw[i:i+16].hex(' ').ljust(47)+'  '+''.join(chr(b) if 32<=b<127 else '.' for b in frame.raw[i:i+16]) for i in range(0,len(frame.raw),16)))

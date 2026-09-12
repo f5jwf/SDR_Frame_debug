@@ -55,3 +55,17 @@ def test_switch_waits_for_previous_receiver_before_restarting(tmp_path,monkeypat
     assert [item[0] for item in started]==['ism868'] and w.band=='ism868'
     assert 'network_key' not in started[0][1]
     w.active=False;w.close();app.processEvents()
+
+
+def test_selected_ism_frame_shows_all_structured_fields(tmp_path,monkeypatch):
+    monkeypatch.setattr(config,'PROFILE',tmp_path)
+    app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    w=MainWindow();w.timer.stop();w.tabs.setCurrentIndex(2)
+    frame=Frame(100,1,868300000,b'\0'*8,None,float('nan'),
+                {'PHY':{'modulation':'OOK/ASK PWM'},'cerberus_pro501':{'event':'ALARM','sensor_key':'abc'}},
+                'CERBERUS PRO-501',protocol='cerberus-pro501')
+    w.packets.append(frame);w.refresh_table()
+    assert w.table.currentRow()==0
+    assert [w.details.topLevelItem(i).text(0) for i in range(w.details.topLevelItemCount())]==['Réception','PHY','cerberus_pro501']
+    assert w.details.topLevelItem(2).child(0).text(0)=='event'
+    w.close();app.processEvents()

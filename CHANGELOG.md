@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.5.1 — 12 septembre 2026
+
+- La première trame visible est automatiquement sélectionnée et tous ses champs sont développés dans le panneau de détail.
+
 ## 0.5.0 — 12 septembre 2026
 
 - Décodeur OOK/PWM adaptatif CERBERUS / Selectronic PRO-501 dans l’onglet ISM 868 MHz : déglitchage, regroupement des ratios, consensus 64 bits et anti-doublon de rafale.
