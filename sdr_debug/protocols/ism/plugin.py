@@ -18,9 +18,10 @@ from .cerberus_pro501 import PRO501_DEDUP_MS, decode_pro501
 
 class UnknownOOKDetector:
     """Keep strong, well-formed OOK bursts visible when no device decoder knows them."""
-    def __init__(self, rate, frequency):
+    def __init__(self, rate, frequency, burst_timeout_s=.003):
         self.rate=rate;self.frequency=frequency;self.state=False;self.run=0
         self.segments=[];self.started=None
+        self.burst_timeout_samples=round(burst_timeout_s*rate)
 
     def _emit(self, timestamp):
         parts=self.segments;self.segments=[];self.started=None
@@ -29,7 +30,7 @@ class UnknownOOKDetector:
         if active<self.rate*.001 or duration<self.rate*.02 or len(parts)<10 or duration>self.rate*.5:return None
         raw=b''.join(bytes([int(state)])+min(65535,round(length*1e6/self.rate)).to_bytes(2,'big') for state,length in parts[:256])
         details={'PHY':{'modulation':'OOK/ASK','integrity':'non renseignée','raw_pulse_count':len(parts),
-                        'duration_ms':1000*duration/self.rate,'raw_bit_length':None},
+                        'stored_pulse_count':min(256,len(parts)),'duration_ms':1000*duration/self.rate,'raw_bit_length':None},
                  'generic_ook':{'segments_us':[(int(state),round(length*1e6/self.rate)) for state,length in parts[:256]]}}
         return Frame(self.started if self.started is not None else timestamp,1,self.frequency,raw,None,float('nan'),details,
                      f'OOK inconnu · {len(parts)} impulsions · {1000*duration/self.rate:.1f} ms',protocol='ism-ook-raw')
@@ -42,7 +43,7 @@ class UnknownOOKDetector:
             state=bool(levels[offset]);length=int(end-offset);offset=int(end)
             if state and not self.segments:self.started=timestamp+(end-length)/self.rate
             if self.segments or state:self.segments.append((state,length))
-            if not state and self.segments and length>=round(.003*self.rate):
+            if not state and self.segments and length>=self.burst_timeout_samples:
                 # The final silence is a delimiter, not a part of the packet.
                 self.segments.pop();frame=self._emit(timestamp+end/self.rate)
                 if frame:frames.append(frame)
@@ -134,8 +135,9 @@ class ISMPlugin:
         self.process=None;self.output=queue.Queue(2000);self.errors=deque(maxlen=8);self.origin=None
         self.carried=[];self.finished=False;self.output_overflow=False;self.input_error=None
         selected_decoder=self.options.get('ism_decoder','auto')
-        self.generic_ook=UnknownOOKDetector(self.rate,self.frequency) if selected_decoder!='pro501' and self.options.get('modulation','auto') in ('auto','ook') else None
         self.pro501=CerberusPRO501Detector(self.rate,self.frequency) if self.id=='ism868' and selected_decoder in ('auto','pro501') and self.options.get('modulation','auto') in ('auto','ook') else None
+        generic_timeout=.030 if self.pro501 is not None else .003
+        self.generic_ook=UnknownOOKDetector(self.rate,self.frequency,generic_timeout) if selected_decoder!='pro501' and self.options.get('modulation','auto') in ('auto','ook') else None
         if self.options.get("fsk_detector","classic") not in ("classic","minmax","auto"):raise ValueError("Détecteur FSK inconnu")
         path=executable(self.options.get('rtl433_path',''))
         self.enabled=bool(path) and selected_decoder!='pro501' and abs(self.frequency-center_frequency)+self.width/2<=min(sample_rate,self.options.get('rf_bandwidth') or sample_rate)/2

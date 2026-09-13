@@ -67,5 +67,7 @@ def test_selected_ism_frame_shows_all_structured_fields(tmp_path,monkeypatch):
     w.packets.append(frame);w.refresh_table()
     assert w.table.currentRow()==0
     assert [w.details.topLevelItem(i).text(0) for i in range(w.details.topLevelItemCount())]==['Réception','PHY','cerberus_pro501']
+    reception=w.details.topLevelItem(0)
+    assert any(reception.child(i).text(0)=='hexadécimal' and reception.child(i).text(1)=='0000000000000000' for i in range(reception.childCount()))
     assert w.details.topLevelItem(2).child(0).text(0)=='event'
     w.close();app.processEvents()

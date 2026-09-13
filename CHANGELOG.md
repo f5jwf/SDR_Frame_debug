@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.6.0 — 13 septembre 2026
+
+- Détails communs : nombre d’octets bruts et hexadécimal pour chaque trame. Les rafales CERBERUS validées ne sont plus doublées comme OOK inconnues en mode automatique.
+
 ## 0.5.3 — 12 septembre 2026
 
 - Rallongement de la fenêtre de rafale CERBERUS PRO-501 pour conserver les répétitions nécessaires au consensus.

@@ -367,7 +367,7 @@ class MainWindow(W.QMainWindow):
                 for k,v in value.items():branch(item,k,v)
             elif isinstance(value,list):
                 for k,v in enumerate(value):branch(item,k,v)
-        branch(self.details,'Réception',{'date':datetime.fromtimestamp(frame.timestamp).isoformat(timespec='milliseconds'),'canal':frame.channel,'fréquence':frame.frequency,'dBFS':frame.level if np.isfinite(frame.level) else 'non fourni','longueur':len(frame.raw) if frame.raw else 'non fournie'})
+        branch(self.details,'Réception',{'date':datetime.fromtimestamp(frame.timestamp).isoformat(timespec='milliseconds'),'canal':frame.channel,'fréquence':frame.frequency,'dBFS':frame.level if np.isfinite(frame.level) else 'non fourni','octets bruts':len(frame.raw) if frame.raw else 'non fournis','hexadécimal':frame.raw.hex().upper() if frame.raw else 'non fourni'})
         for key,value in frame.fields.items():branch(self.details,key,value)
         self.details.expandAll()
         if frame.protocol!='zigbee' and not frame.raw:
