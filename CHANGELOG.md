@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.6.1 — 13 septembre 2026
+
+- Colonne Hexa brut dans toutes les listes de trames et conservation des codes hexadécimaux nus fournis par rtl_433.
+
 ## 0.6.0 — 13 septembre 2026
 
 - Détails communs : nombre d’octets bruts et hexadécimal pour chaque trame. Les rafales CERBERUS validées ne sont plus doublées comme OOK inconnues en mode automatique.

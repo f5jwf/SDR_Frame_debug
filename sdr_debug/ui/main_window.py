@@ -140,11 +140,11 @@ class MainWindow(W.QMainWindow):
         row=W.QHBoxLayout(); self.pause=W.QCheckBox('Pause affichage'); self.pause.toggled.connect(self.unpause)
         self.favorite_only=W.QCheckBox('Favoris'); self.favorite_only.toggled.connect(self.refresh_table)
         clear=W.QPushButton('Effacer'); clear.clicked.connect(self.clear_packets); row.addWidget(self.pause); row.addWidget(self.favorite_only); row.addWidget(clear); rl.addLayout(row)
-        self.table=W.QTableWidget(0,6); self.table.setHorizontalHeaderLabels(['★','Date / heure','CH','dBFS','CRC','Résumé']); self.table.verticalHeader().setDefaultSectionSize(38)
+        self.table=W.QTableWidget(0,7); self.table.setHorizontalHeaderLabels(['★','Date / heure','CH','dBFS','CRC','Résumé','Hexa brut']); self.table.verticalHeader().setDefaultSectionSize(38)
         self.table.setSelectionBehavior(W.QAbstractItemView.SelectionBehavior.SelectRows); self.table.setSelectionMode(W.QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(W.QAbstractItemView.EditTrigger.NoEditTriggers); self.table.verticalHeader().hide()
         self.table.horizontalHeader().setSectionResizeMode(5,W.QHeaderView.ResizeMode.Stretch)
-        for c,width in enumerate([28,103,38,50,45]): self.table.setColumnWidth(c,width)
+        for c,width in enumerate([28,103,38,50,45,0,230]): self.table.setColumnWidth(c,width)
         header=self.table.horizontalHeader(); header.setSectionsClickable(True); header.setSortIndicatorShown(True)
         header.setSortIndicator(1,QtCore.Qt.SortOrder.DescendingOrder if self.newest_first else QtCore.Qt.SortOrder.AscendingOrder)
         header.sectionClicked.connect(self.toggle_time_order)
@@ -337,7 +337,7 @@ class MainWindow(W.QMainWindow):
             if before:hi=mid
             else:lo=mid+1
         row=lo; self.table.insertRow(row)
-        values=['★' if frame.favorite else '',datetime.fromtimestamp(frame.timestamp).strftime('%Y-%m-%d\n%H:%M:%S.%f')[:-3],str(frame.channel),f'{frame.level:.1f}' if np.isfinite(frame.level) else '—','OK' if frame.crc_ok is True else ('BAD' if frame.crc_ok is False else frame.fields.get('PHY',{}).get('integrity','n/d')),frame.summary]
+        values=['★' if frame.favorite else '',datetime.fromtimestamp(frame.timestamp).strftime('%Y-%m-%d\n%H:%M:%S.%f')[:-3],str(frame.channel),f'{frame.level:.1f}' if np.isfinite(frame.level) else '—','OK' if frame.crc_ok is True else ('BAD' if frame.crc_ok is False else frame.fields.get('PHY',{}).get('integrity','n/d')),frame.summary,frame.raw.hex().upper() if frame.raw else 'non fourni']
         for col,value in enumerate(values):
             item=(TimestampItem(value) if col==1 else W.QTableWidgetItem(value)); item.setData(QtCore.Qt.ItemDataRole.UserRole,frame)
             item.setToolTip(datetime.fromtimestamp(frame.timestamp).isoformat(timespec='milliseconds')+'\n'+frame.summary)

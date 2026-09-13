@@ -215,13 +215,21 @@ class ISMPlugin:
             codes=event.get('codes',[])
             if isinstance(codes,str):codes=[codes]
             if codes:
-                match=re.fullmatch(r'\{(\d+)\}([0-9a-fA-F]+)',str(codes[0]))
+                code=str(codes[0]).strip()
+                match=re.fullmatch(r'\{(\d+)\}\s*(?:0x)?([0-9a-fA-F]+)',code)
                 if match:
                     bits=int(match[1]);value=match[2];raw=bytes.fromhex(value+('0' if len(value)%2 else ''))
+                else:
+                    # Some rtl_433 decoders publish only a bare hexadecimal
+                    # code.  Preserve it when it is unambiguously hexadecimal.
+                    value=code.removeprefix('0x')
+                    if re.fullmatch(r'[0-9a-fA-F]{2,}',value):
+                        raw=bytes.fromhex(value+('0' if len(value)%2 else ''))
             mic=str(event.get('mic',''))
             crc=True if mic.upper().startswith('CRC') else None
             details={'rtl_433':event,'PHY':{'modulation':mod or 'non renseignée','channel_width_Hz':self.width,
                                          'raw_bit_length':bits,'integrity':mic or 'non renseignée'}}
+            if codes:details['rtl_433']['raw_code']=str(codes[0])
             summary=str(event['model'])
             for key in ('id','channel','temperature_C','humidity','pressure_hPa','battery_ok','state'):
                 if key in event:summary+=f' · {key}={event[key]}'
