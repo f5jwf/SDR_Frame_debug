@@ -393,10 +393,10 @@ class MainWindow(W.QMainWindow):
             if result is not None and result.valid:
                 details={'PHY':{'modulation':'OOK/ASK PWM','raw_bit_length':64,'integrity':'non renseignée'},
                          'cerberus_pro501':{'raw_bits':result.raw_bits,'repeats':result.repeats,'frame_confidence':result.frame_confidence,
-                            'symbol_confidence':result.symbol_confidence,'frame_fingerprint':result.sensor_key,'sensor_id':'non déterminé','event':result.event,
+                            'symbol_confidence':result.symbol_confidence,'frame_fingerprint':result.sensor_key,'sensor_id':'non déterminé','sensor_profile':result.sensor_profile or 'non reconnu','profile_distance':result.profile_distance,'profile_margin':result.profile_margin,'profile_distances':result.profile_distances,'event':result.event,
                             'battery':result.battery,'timing_us':result.timing_us,'ratio_short':result.ratio_short,'ratio_long':result.ratio_long}}
-                decoded=Frame(frame.timestamp,1,frame.frequency,result.raw_u64.to_bytes(8,'big'),None,float('nan'),details,
-                              f'CERBERUS PRO-501 · {result.event} · empreinte trame {result.sensor_key} · {result.repeats} répétitions · confiance {result.frame_confidence:.0%}',protocol='cerberus-pro501')
+                summary=(f'CERBERUS PRO-501 · profil {result.sensor_profile} (candidat) · ' if result.sensor_profile else 'CERBERUS PRO-501 · profil non reconnu · ') + f'{result.event} · empreinte trame {result.sensor_key} · {result.repeats} répétitions · confiance {result.frame_confidence:.0%}'
+                decoded=Frame(frame.timestamp,1,frame.frequency,result.raw_u64.to_bytes(8,'big'),None,float('nan'),details,summary,protocol='cerberus-pro501')
                 self.packets.append(decoded);self.add_row(decoded)
         # rtl_433 candidates are associated by their timestamp with the selected
         # raw burst.  They are retained until selection, never mixed with other bursts.

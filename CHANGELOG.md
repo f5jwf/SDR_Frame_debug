@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.9.0 — 13 septembre 2026
+
+- Reconnaissance expérimentale des profils radio CERBERUS A, B et C dans le flux démodulé, tolérante aux erreurs de symboles et explicitement distincte du `sensor_id` non démontré.
+
 ## 0.8.2 — 13 septembre 2026
 
 - « Sauver hex » exporte désormais la rafale OOK sélectionnée dans Données démodulées, au lieu de la trame décodée dérivée.

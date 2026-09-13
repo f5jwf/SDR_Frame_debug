@@ -19,6 +19,16 @@ PRO501_MIN_REPEATS = 3
 PRO501_DEDUP_MS = 1000
 PRO501_MIN_CONFIDENCE = .85
 
+# Profiles observed in the supplied Selectronic captures.  They are radio
+# signatures, not claimed serial numbers: synchronisation or a rolling field
+# can still prevent a match on an individual burst.
+PRO501_SENSOR_PROFILES = {
+    'A': '0000000000000000000000000000000000010110001000000000000000001000',
+    'B': '0000000000000000000000000000000001001101110000000000000000001011',
+    'C': '0000000000000000000000000000000001000010110000000000000000001011',
+}
+PRO501_PROFILE_MAX_DISTANCE = 4
+
 
 @dataclass(frozen=True)
 class Pro501DecodeResult:
@@ -35,6 +45,10 @@ class Pro501DecodeResult:
     timing_us: float = 0.
     ratio_short: float = 0.
     ratio_long: float = 0.
+    sensor_profile: str | None = None
+    profile_distance: int | None = None
+    profile_margin: int | None = None
+    profile_distances: dict[str, int] | None = None
 
 
 def parse_hex_records(text: str) -> list[tuple[int, int]]:
@@ -161,6 +175,23 @@ def compare_frames(a: str, b: str) -> list[int]:
     return [index for index, (left, right) in enumerate(zip(a, b)) if left != right]
 
 
+def match_sensor_profile(bits: str):
+    """Match a complete demodulated bit stream against learned 64-bit profiles."""
+    if len(bits) < PRO501_FRAME_BITS:
+        return None, None, None, {}
+    windows = [int(bits[index:index + PRO501_FRAME_BITS], 2)
+               for index in range(len(bits) - PRO501_FRAME_BITS + 1)]
+    distances = {name: min((window ^ int(template, 2)).bit_count() for window in windows)
+                 for name, template in PRO501_SENSOR_PROFILES.items()}
+    ordered = sorted(distances.items(), key=lambda item: item[1])
+    name, distance = ordered[0]
+    margin = ordered[1][1] - distance if len(ordered) > 1 else PRO501_FRAME_BITS
+    # A match needs both a small Hamming distance and a strictly better score
+    # than another learned profile; otherwise leave the physical ID unknown.
+    return (name if distance <= PRO501_PROFILE_MAX_DISTANCE and margin >= 1 else None,
+            distance, margin, distances)
+
+
 def build_consensus(frames):
     if not frames:
         return '', 0.
@@ -203,6 +234,9 @@ def decode_pro501(edges) -> Pro501DecodeResult | None:
     frame_confidence = min(repeat_confidence, symbol_confidence)
     valid = len(frames) >= PRO501_MIN_REPEATS and frame_confidence >= PRO501_MIN_CONFIDENCE
     fingerprint = sha256(consensus.encode('ascii')).hexdigest()[:12] if valid else None
+    profile, profile_distance, profile_margin, profile_distances = match_sensor_profile(bits)
     return Pro501DecodeResult(valid, consensus, int(consensus, 2), len(frames), frame_confidence,
                               symbol_confidence, fingerprint, timing_us=timing,
-                              ratio_short=short, ratio_long=long)
+                              ratio_short=short, ratio_long=long, sensor_profile=profile,
+                              profile_distance=profile_distance, profile_margin=profile_margin,
+                              profile_distances=profile_distances)

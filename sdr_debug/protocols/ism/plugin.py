@@ -79,9 +79,9 @@ class CerberusPRO501Detector:
         details={'PHY':{'modulation':'OOK/ASK PWM','channel_width_Hz':None,'raw_bit_length':64,'integrity':'non renseignée'},
                  'cerberus_pro501':{'valid':True,'raw_bits':result.raw_bits,'repeats':result.repeats,
                     'frame_confidence':result.frame_confidence,'symbol_confidence':result.symbol_confidence,
-                    'frame_fingerprint':result.sensor_key,'sensor_id':'non déterminé','event':result.event,'battery':result.battery,
+                    'frame_fingerprint':result.sensor_key,'sensor_id':'non déterminé','sensor_profile':result.sensor_profile or 'non reconnu','profile_distance':result.profile_distance,'profile_margin':result.profile_margin,'profile_distances':result.profile_distances,'event':result.event,'battery':result.battery,
                     'timing_us':result.timing_us,'ratio_short':result.ratio_short,'ratio_long':result.ratio_long}}
-        summary=f'CERBERUS PRO-501 · {result.event} · empreinte trame {result.sensor_key} · {result.repeats} répétitions · confiance {result.frame_confidence:.0%}'
+        summary=(f"CERBERUS PRO-501 · profil {result.sensor_profile} (candidat) · " if result.sensor_profile else "CERBERUS PRO-501 · profil non reconnu · ") + f'{result.event} · empreinte trame {result.sensor_key} · {result.repeats} répétitions · confiance {result.frame_confidence:.0%}'
         return Frame(started if started is not None else timestamp,1,self.frequency,raw,None,float('nan'),details,summary,protocol='cerberus-pro501')
 
     def feed(self, iq, timestamp):

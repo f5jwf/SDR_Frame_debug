@@ -1,7 +1,7 @@
 from pathlib import Path
 import pytest
 from sdr_debug.protocols.ism.cerberus_pro501 import (
-    PRO501_FRAME_BITS, compare_frames, decode_pro501, deglitch_edges, parse_hex_records,
+    PRO501_FRAME_BITS, PRO501_SENSOR_PROFILES, compare_frames, decode_pro501, deglitch_edges, match_sensor_profile, parse_hex_records,
 )
 
 
@@ -47,3 +47,9 @@ def test_low_battery_duty_cycle_and_missing_symbol_remain_decodable():
 def test_templates_are_distinct_without_assuming_field_positions():
     assert compare_frames(FRAME_A, FRAME_B)
     assert compare_frames(FRAME_B, FRAME_C)
+
+
+def test_learned_profile_requires_unambiguous_radio_signature():
+    profile, distance, margin, distances = match_sensor_profile(PRO501_SENSOR_PROFILES['B'])
+    assert profile == 'B' and distance == 0 and margin >= 1
+    assert distances['B'] == 0
