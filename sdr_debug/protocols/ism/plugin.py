@@ -18,20 +18,22 @@ from .cerberus_pro501 import PRO501_DEDUP_MS, decode_pro501
 
 class UnknownOOKDetector:
     """Keep strong, well-formed OOK bursts visible when no device decoder knows them."""
-    def __init__(self, rate, frequency, burst_timeout_s=.003):
+    def __init__(self, rate, frequency, burst_timeout_s=.003, max_duration_s=.5, max_pulses=256):
         self.rate=rate;self.frequency=frequency;self.state=False;self.run=0
         self.segments=[];self.started=None
         self.burst_timeout_samples=round(burst_timeout_s*rate)
+        self.max_duration=max_duration_s*rate;self.max_pulses=max_pulses
 
     def _emit(self, timestamp):
         parts=self.segments;self.segments=[];self.started=None
         active=sum(length for state,length in parts if state)
         duration=sum(length for _,length in parts)
-        if active<self.rate*.001 or duration<self.rate*.02 or len(parts)<10 or duration>self.rate*.5:return None
-        raw=b''.join(bytes([int(state)])+min(65535,round(length*1e6/self.rate)).to_bytes(2,'big') for state,length in parts[:256])
+        if active<self.rate*.001 or duration<self.rate*.02 or len(parts)<10 or duration>self.max_duration:return None
+        stored=parts[:self.max_pulses]
+        raw=b''.join(bytes([int(state)])+min(65535,round(length*1e6/self.rate)).to_bytes(2,'big') for state,length in stored)
         details={'PHY':{'modulation':'OOK/ASK','integrity':'non renseignée','raw_pulse_count':len(parts),
-                        'stored_pulse_count':min(256,len(parts)),'duration_ms':1000*duration/self.rate,'raw_bit_length':None},
-                 'generic_ook':{'segments_us':[(int(state),round(length*1e6/self.rate)) for state,length in parts[:256]]}}
+                        'stored_pulse_count':len(stored),'duration_ms':1000*duration/self.rate,'raw_bit_length':None},
+                 'generic_ook':{'segments_us':[(int(state),round(length*1e6/self.rate)) for state,length in stored]}}
         details['Démodulation']={'durée_ms':round(1000*duration/self.rate,3),'octets_reçus':len(raw),
                                  'données':'pulses OOK encodées : niveau + durée'}
         return Frame(self.started if self.started is not None else timestamp,1,self.frequency,raw,None,float('nan'),details,
@@ -141,7 +143,7 @@ class ISMPlugin:
         generic_timeout=.030 if self.pro501 is not None else .003
         # Raw demodulated bursts are always retained independently from their
         # later protocol interpretation.  This makes RF reception auditable.
-        self.generic_ook=UnknownOOKDetector(self.rate,self.frequency,generic_timeout) if self.options.get('modulation','auto') in ('auto','ook') else None
+        self.generic_ook=UnknownOOKDetector(self.rate,self.frequency,generic_timeout,2.0,4096) if self.options.get('modulation','auto') in ('auto','ook') else None
         if self.options.get("fsk_detector","classic") not in ("classic","minmax","auto"):raise ValueError("Détecteur FSK inconnu")
         path=executable(self.options.get('rtl433_path',''))
         self.enabled=bool(path) and selected_decoder!='pro501' and abs(self.frequency-center_frequency)+self.width/2<=min(sample_rate,self.options.get('rf_bandwidth') or sample_rate)/2

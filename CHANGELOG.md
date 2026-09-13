@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.7.1 — 13 septembre 2026
+
+- Conservation des rafales OOK démodulées longues dans la vue de réception, avec jusqu’à 4096 impulsions par rafale.
+
 ## 0.7.0 — 13 septembre 2026
 
 - Deux vues ISM séparées : données OOK démodulées avec durée, taille et aperçu hexadécimal ; trames interprétées avec CRC, champs et payload.
