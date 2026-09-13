@@ -234,7 +234,12 @@ def decode_pro501(edges) -> Pro501DecodeResult | None:
     frame_confidence = min(repeat_confidence, symbol_confidence)
     valid = len(frames) >= PRO501_MIN_REPEATS and frame_confidence >= PRO501_MIN_CONFIDENCE
     fingerprint = sha256(consensus.encode('ascii')).hexdigest()[:12] if valid else None
-    profile, profile_distance, profile_margin, profile_distances = match_sensor_profile(bits)
+    # Profile learning is diagnostic only.  A malformed profile must never
+    # suppress an otherwise valid receive-only CERBERUS frame.
+    try:
+        profile, profile_distance, profile_margin, profile_distances = match_sensor_profile(bits)
+    except (TypeError, ValueError):
+        profile, profile_distance, profile_margin, profile_distances = None, None, None, {}
     return Pro501DecodeResult(valid, consensus, int(consensus, 2), len(frames), frame_confidence,
                               symbol_confidence, fingerprint, timing_us=timing,
                               ratio_short=short, ratio_long=long, sensor_profile=profile,

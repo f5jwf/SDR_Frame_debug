@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.9.1 — 13 septembre 2026
+
+- La reconnaissance de profil CERBERUS est strictement diagnostique : une erreur de profil ne peut plus empêcher l’affichage d’une trame valide.
+
 ## 0.9.0 — 13 septembre 2026
 
 - Reconnaissance expérimentale des profils radio CERBERUS A, B et C dans le flux démodulé, tolérante aux erreurs de symboles et explicitement distincte du `sensor_id` non démontré.
