@@ -32,8 +32,10 @@ class UnknownOOKDetector:
         details={'PHY':{'modulation':'OOK/ASK','integrity':'non renseignée','raw_pulse_count':len(parts),
                         'stored_pulse_count':min(256,len(parts)),'duration_ms':1000*duration/self.rate,'raw_bit_length':None},
                  'generic_ook':{'segments_us':[(int(state),round(length*1e6/self.rate)) for state,length in parts[:256]]}}
+        details['Démodulation']={'durée_ms':round(1000*duration/self.rate,3),'octets_reçus':len(raw),
+                                 'données':'pulses OOK encodées : niveau + durée'}
         return Frame(self.started if self.started is not None else timestamp,1,self.frequency,raw,None,float('nan'),details,
-                     f'OOK inconnu · {len(parts)} impulsions · {1000*duration/self.rate:.1f} ms',protocol='ism-ook-raw')
+                     f'OOK démodulée · {len(parts)} impulsions · {1000*duration/self.rate:.1f} ms',protocol='ism-demodulated')
 
     def feed(self, iq, timestamp):
         noise=np.percentile(np.abs(iq),20); threshold=max(.002,noise*8)
@@ -137,7 +139,9 @@ class ISMPlugin:
         selected_decoder=self.options.get('ism_decoder','auto')
         self.pro501=CerberusPRO501Detector(self.rate,self.frequency) if self.id=='ism868' and selected_decoder in ('auto','pro501') and self.options.get('modulation','auto') in ('auto','ook') else None
         generic_timeout=.030 if self.pro501 is not None else .003
-        self.generic_ook=UnknownOOKDetector(self.rate,self.frequency,generic_timeout) if selected_decoder!='pro501' and self.options.get('modulation','auto') in ('auto','ook') else None
+        # Raw demodulated bursts are always retained independently from their
+        # later protocol interpretation.  This makes RF reception auditable.
+        self.generic_ook=UnknownOOKDetector(self.rate,self.frequency,generic_timeout) if self.options.get('modulation','auto') in ('auto','ook') else None
         if self.options.get("fsk_detector","classic") not in ("classic","minmax","auto"):raise ValueError("Détecteur FSK inconnu")
         path=executable(self.options.get('rtl433_path',''))
         self.enabled=bool(path) and selected_decoder!='pro501' and abs(self.frequency-center_frequency)+self.width/2<=min(sample_rate,self.options.get('rf_bandwidth') or sample_rate)/2
@@ -259,8 +263,6 @@ class ISMPlugin:
         pro501_frames=self.pro501.feed(iq,timestamp-delay) if self.pro501 is not None else []
         if self.generic_ook is not None:
             raw_frames=self.generic_ook.feed(iq,timestamp-delay)
-            # A recognised burst supersedes its generic OOK representation.
-            if pro501_frames:raw_frames=[frame for frame in raw_frames if frame.protocol!='ism-ook-raw']
             frames.extend(raw_frames)
         frames.extend(pro501_frames)
         return frames
@@ -269,7 +271,7 @@ class ISMPlugin:
         if self.process is None or self.finished:
             frames=self._frames()
             pro501_frames=self.pro501.finish(self.origin or 0.) if self.pro501 is not None else []
-            if self.generic_ook is not None and not pro501_frames:frames.extend(self.generic_ook.finish(self.origin or 0.))
+            if self.generic_ook is not None:frames.extend(self.generic_ook.finish(self.origin or 0.))
             frames.extend(pro501_frames)
             return frames
         self.finished=True
@@ -285,7 +287,6 @@ class ISMPlugin:
         pro501_frames=self.pro501.finish(self.origin or 0.) if self.pro501 is not None else []
         if self.generic_ook is not None:
             raw_frames=self.generic_ook.finish(self.origin or 0.)
-            if pro501_frames:raw_frames=[]
             frames.extend(raw_frames)
         frames.extend(pro501_frames)
         return frames

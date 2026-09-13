@@ -669,3 +669,8 @@ et non sur :
 **des valeurs HIGH/LOW fixes apprises sur un seul capteur.**
 
 C’est la condition principale pour qu’il reste fiable avec les capteurs A, B, C et avec une batterie faible.
+
+
+## 22. Traçabilité réception / décodage
+
+La vue ISM conserve chaque rafale OOK démodulée séparément de son consensus PRO-501. La réception expose timestamp, durée, taille et pulses encodées en hexadécimal ; le décodage expose les répétitions et les champs interprétés.

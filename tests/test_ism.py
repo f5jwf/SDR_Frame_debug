@@ -66,7 +66,7 @@ def test_unknown_ook_burst_is_kept_as_a_raw_frame():
         frames.extend(detector.feed(wave[start:start+1000],100+start/1e6))
     frames.extend(detector.feed(np.zeros(5000,np.complex64),100.03))
     assert len(frames)==1
-    assert frames[0].protocol=='ism-ook-raw' and 'OOK inconnu' in frames[0].summary
+    assert frames[0].protocol=='ism-demodulated' and 'OOK démodulée' in frames[0].summary
     assert frames[0].raw and frames[0].crc_ok is None
 
 

@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.7.0 — 13 septembre 2026
+
+- Deux vues ISM séparées : données OOK démodulées avec durée, taille et aperçu hexadécimal ; trames interprétées avec CRC, champs et payload.
+
 ## 0.6.1 — 13 septembre 2026
 
 - Colonne Hexa brut dans toutes les listes de trames et conservation des codes hexadécimaux nus fournis par rtl_433.
