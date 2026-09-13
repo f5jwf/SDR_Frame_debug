@@ -167,7 +167,7 @@ class MainWindow(W.QMainWindow):
         replay=W.QPushButton('Ouvrir I/Q'); replay.clicked.connect(self.choose_replay)
         self.record=W.QPushButton('Enregistrer I/Q'); self.record.setCheckable(True); self.record.clicked.connect(self.record_iq)
         export=W.QPushButton('Exporter trames'); export.clicked.connect(self.export)
-        export_hex=W.QPushButton('Sauver hex'); export_hex.setToolTip('Enregistre les octets bruts des trames visibles, une trame hexadécimale par ligne.'); export_hex.clicked.connect(lambda:self.export(hexadecimal=True))
+        export_hex=W.QPushButton('Sauver hex'); export_hex.setToolTip('Enregistre la rafale démodulée sélectionnée ; sans sélection, enregistre les trames décodées visibles.'); export_hex.clicked.connect(lambda:self.export(hexadecimal=True))
         session=W.QPushButton('Sauver session'); session.clicked.connect(lambda:self.export(session=True))
         prefs=W.QPushButton('FFT / Waterfall'); prefs.clicked.connect(self.preferences)
         keys=W.QPushButton('Clés Zigbee'); keys.clicked.connect(self.keys_dialog);self.keys_button=keys
@@ -440,7 +440,15 @@ class MainWindow(W.QMainWindow):
         if not path:return
         if hexadecimal and not Path(path).suffix:path+='.hex'
         self.settings.capture_dir=str(Path(path).parent)
-        frames=list(self.packets)+list(self.pending) if session else [f for f in self.packets if self.matches(f)]
+        if session:
+            frames=list(self.packets)+list(self.pending)
+        elif hexadecimal and self.band != 'zigbee' and self.demod_table.currentRow() >= 0:
+            # The raw OOK burst is the object the user selected.  It must take
+            # precedence over the short, derived decoder result in the table below.
+            item=self.demod_table.item(self.demod_table.currentRow(),0)
+            frames=[item.data(QtCore.Qt.ItemDataRole.UserRole)] if item is not None else []
+        else:
+            frames=[f for f in self.packets if self.matches(f)]
         metadata={'settings':self.settings.public(),'counters':dict(self.engine.counts)} if session else {}
         def job():
             try:export_frames(path,frames,metadata); self.tasks.put(('info',f'Export terminé : {path}'))

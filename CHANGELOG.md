@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.8.2 — 13 septembre 2026
+
+- « Sauver hex » exporte désormais la rafale OOK sélectionnée dans Données démodulées, au lieu de la trame décodée dérivée.
+
 ## 0.8.1 — 13 septembre 2026
 
 - Le champ CERBERUS affiché comme identifiant était l’empreinte de la trame complète, susceptible de changer avec les bits roulants ou d’état. Il est désormais nommé « empreinte trame » ; le `sensor_id` reste explicitement non déterminé.

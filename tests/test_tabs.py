@@ -71,3 +71,23 @@ def test_selected_ism_frame_shows_all_structured_fields(tmp_path,monkeypatch):
     assert any(reception.child(i).text(0)=='hexadécimal' and reception.child(i).text(1)=='0000000000000000' for i in range(reception.childCount()))
     assert w.details.topLevelItem(2).child(0).text(0)=='event'
     w.close();app.processEvents()
+
+
+def test_save_hex_exports_selected_demodulated_burst(tmp_path, monkeypatch):
+    from sdr_debug.ui import main_window as module
+    monkeypatch.setattr(config, 'PROFILE', tmp_path)
+    app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    w=MainWindow();w.timer.stop();w.tabs.setCurrentIndex(2)
+    raw=Frame(100, 1, 868300000, b'\x01\x02\x03\x00\x00\x04', None, float('nan'),
+              {'Démodulation': {'durée_ms': 4.0}}, 'OOK démodulée', protocol='ism-demodulated')
+    w.add_demodulated_row(raw);w.demod_table.setCurrentCell(0, 0)
+    captured=[]
+    monkeypatch.setattr(module.W.QFileDialog, 'getSaveFileName', lambda *args: (str(tmp_path/'burst.hex'), ''))
+    monkeypatch.setattr(module, 'export_frames', lambda path, frames, metadata: captured.extend(frames))
+    class ImmediateThread:
+        def __init__(self, target, daemon): self.target=target
+        def start(self): self.target()
+    monkeypatch.setattr(module.threading, 'Thread', ImmediateThread)
+    w.export(hexadecimal=True)
+    assert captured == [raw]
+    w.close();app.processEvents()
