@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.8.0 — 13 septembre 2026
+
+- La liste des trames décodées ISM est désormais alimentée uniquement par la rafale démodulée sélectionnée. Horodatage complet en millisecondes et colonne hexadécimale redimensionnable à la souris.
+
 ## 0.7.1 — 13 septembre 2026
 
 - Conservation des rafales OOK démodulées longues dans la vue de réception, avec jusqu’à 4096 impulsions par rafale.

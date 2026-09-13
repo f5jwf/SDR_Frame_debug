@@ -14,6 +14,8 @@ from ..version import __version__
 from ..dsp.engine import Engine
 from ..export.packets import export_frames
 from ..protocols.registry import available
+from ..protocols.base import Frame
+from ..protocols.ism.cerberus_pro501 import decode_pro501
 from ..sdr.backends import discover
 from ..sdr.rates import SAMPLE_RATES,usable_bandwidth
 
@@ -29,7 +31,7 @@ class MainWindow(W.QMainWindow):
         super().__init__(); self.setWindowTitle(f'SDR Frame Debug v{__version__}'); self.resize(1500,960)
         self.band='zigbee';self.views={};self.switch_target=None;self.resume_after_switch=False
         self.last_plot=None
-        self.settings=config.load(); self.newest_first=self.settings.newest_first; self.row_items={}; self.demod_row_items={}; self.engine=Engine(isolated=True); self.packets=deque(maxlen=2000); self.demodulated=deque(maxlen=2000); self.pending=deque(maxlen=2000)
+        self.settings=config.load(); self.newest_first=self.settings.newest_first; self.row_items={}; self.demod_row_items={}; self.engine=Engine(isolated=True); self.packets=deque(maxlen=2000); self.demodulated=deque(maxlen=2000);self.decoded_candidates=deque(maxlen=2000); self.pending=deque(maxlen=2000)
         self.plugins=available(); self.tasks=queue.Queue(); self.active=False; self.closing=False
         self.last_water_render=0.; self.water_palette=None; self.last_frequency_range=None
         self.water=None; self.water_index=0; self.water_count=0; self.water_key=None; self.last_total=0; self.last_stats=time.monotonic()
@@ -143,8 +145,8 @@ class MainWindow(W.QMainWindow):
         self.demod_label=W.QLabel('Données démodulées');rl.addWidget(self.demod_label)
         self.demod_table=W.QTableWidget(0,5);self.demod_table.setHorizontalHeaderLabels(['Date / heure','Durée','Octets','Hexa (début)','Type']);self.demod_table.verticalHeader().hide();self.demod_table.verticalHeader().setDefaultSectionSize(30)
         self.demod_table.setSelectionBehavior(W.QAbstractItemView.SelectionBehavior.SelectRows);self.demod_table.setSelectionMode(W.QAbstractItemView.SelectionMode.SingleSelection);self.demod_table.setEditTriggers(W.QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.demod_table.horizontalHeader().setSectionResizeMode(3,W.QHeaderView.ResizeMode.Stretch)
-        for c,width in enumerate([118,65,55,0,180]):self.demod_table.setColumnWidth(c,width)
+        self.demod_table.horizontalHeader().setSectionResizeMode(3,W.QHeaderView.ResizeMode.Interactive)
+        for c,width in enumerate([190,65,55,300,180]):self.demod_table.setColumnWidth(c,width)
         self.demod_table.itemSelectionChanged.connect(self.show_demodulated);rl.addWidget(self.demod_table,2)
         self.decode_table_label=W.QLabel('Trames décodées');rl.addWidget(self.decode_table_label)
         self.table=W.QTableWidget(0,7); self.table.setHorizontalHeaderLabels(['★','Date / heure','CH','dBFS','CRC','Résumé','Hexa brut']); self.table.verticalHeader().setDefaultSectionSize(38)
@@ -356,7 +358,7 @@ class MainWindow(W.QMainWindow):
         row=self.demod_table.rowCount();self.demod_table.insertRow(row)
         duration=frame.fields.get('Démodulation',{}).get('durée_ms',frame.fields.get('PHY',{}).get('duration_ms','—'))
         preview=frame.raw.hex().upper();preview=preview[:48]+('…' if len(preview)>48 else '') if preview else 'non fourni'
-        values=[datetime.fromtimestamp(frame.timestamp).strftime('%Y-%m-%d\n%H:%M:%S.%f')[:-3],f'{duration} ms',str(len(frame.raw)),preview,frame.summary]
+        values=[datetime.fromtimestamp(frame.timestamp).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],f'{duration} ms',str(len(frame.raw)),preview,frame.summary]
         for col,value in enumerate(values):
             item=W.QTableWidgetItem(value);item.setData(QtCore.Qt.ItemDataRole.UserRole,frame);item.setToolTip(frame.raw.hex().upper() or 'Octets bruts non fournis')
             self.demod_table.setItem(row,col,item)
@@ -378,13 +380,36 @@ class MainWindow(W.QMainWindow):
         branch(self.details,'Décodage',{'statut':'non reconnu à ce stade','note':'Les octets représentent les pulses OOK : niveau logique + durée en microsecondes.'})
         self.details.expandAll()
         self.raw.setPlainText('\n'.join(f'{i:04x}  '+frame.raw[i:i+16].hex(' ').ljust(47)+'  '+''.join(chr(b) if 32<=b<127 else '.' for b in frame.raw[i:i+16]) for i in range(0,len(frame.raw),16)))
+        self.decode_demodulated(frame)
+
+    def decode_demodulated(self,frame):
+        """Populate decoded results only for the selected OOK burst."""
+        self.packets.clear();self.pending.clear();self.row_items.clear();self.table.setRowCount(0)
+        duration=float(frame.fields.get('Démodulation',{}).get('durée_ms',0))/1000
+        selected=self.ism_decoder.currentData() if self.band=='ism868' else 'rtl433'
+        if selected in ('auto','pro501') and len(frame.raw)%3==0:
+            edges=[(frame.raw[index],int.from_bytes(frame.raw[index+1:index+3],'big')) for index in range(0,len(frame.raw),3)]
+            result=decode_pro501(edges)
+            if result is not None and result.valid:
+                details={'PHY':{'modulation':'OOK/ASK PWM','raw_bit_length':64,'integrity':'non renseignée'},
+                         'cerberus_pro501':{'raw_bits':result.raw_bits,'repeats':result.repeats,'frame_confidence':result.frame_confidence,
+                            'symbol_confidence':result.symbol_confidence,'sensor_key':result.sensor_key,'event':result.event,
+                            'battery':result.battery,'timing_us':result.timing_us,'ratio_short':result.ratio_short,'ratio_long':result.ratio_long}}
+                decoded=Frame(frame.timestamp,1,frame.frequency,result.raw_u64.to_bytes(8,'big'),None,float('nan'),details,
+                              f'CERBERUS PRO-501 · {result.event} · capteur {result.sensor_key} · {result.repeats} répétitions · confiance {result.frame_confidence:.0%}',protocol='cerberus-pro501')
+                self.packets.append(decoded);self.add_row(decoded)
+        # rtl_433 candidates are associated by their timestamp with the selected
+        # raw burst.  They are retained until selection, never mixed with other bursts.
+        for candidate in self.decoded_candidates:
+            if candidate.protocol.startswith('ism') and frame.timestamp-.010 <= candidate.timestamp <= frame.timestamp+duration+.010:
+                self.packets.append(candidate);self.add_row(candidate)
 
     def unpause(self,on):
         if not on:
             self.packets.extend(self.pending); self.pending.clear(); self.refresh_table()
 
     def clear_packets(self):
-        self.packets.clear();self.demodulated.clear(); self.pending.clear(); self.row_items.clear();self.demod_row_items.clear(); self.table.setRowCount(0);self.demod_table.setRowCount(0); self.details.clear(); self.raw.clear()
+        self.packets.clear();self.demodulated.clear();self.decoded_candidates.clear(); self.pending.clear(); self.row_items.clear();self.demod_row_items.clear(); self.table.setRowCount(0);self.demod_table.setRowCount(0); self.details.clear(); self.raw.clear()
 
     def favorite(self,row,column):
         frame=self.table.item(row,0).data(QtCore.Qt.ItemDataRole.UserRole); frame.favorite=not frame.favorite; self.refresh_table()
@@ -521,6 +546,9 @@ class MainWindow(W.QMainWindow):
                     if old is not None:self.demod_table.removeRow(old.row())
                 self.demodulated.append(frame);self.add_demodulated_row(frame)
                 continue
+            if self.band!='zigbee':
+                self.decoded_candidates.append(frame)
+                continue
             if self.pause.isChecked():self.pending.append(frame)
             else:
                 if len(self.packets)==self.packets.maxlen and self.table.rowCount():
@@ -587,7 +615,7 @@ class MainWindow(W.QMainWindow):
     def complete_switch(self):
         if self.switch_target is None:return
         self.settings=self.current();config.save(self.settings)
-        attributes=('settings','packets','demodulated','pending','engine','key_options','newest_first','water','water_index',
+        attributes=('settings','packets','demodulated','decoded_candidates','pending','engine','key_options','newest_first','water','water_index',
                     'water_count','water_key','water_times','last_plot','last_total','last_stats','actual_gain_text')
         state={name:getattr(self,name) for name in attributes if hasattr(self,name)}
         state['paused']=self.pause.isChecked()
@@ -596,7 +624,7 @@ class MainWindow(W.QMainWindow):
         state=self.views.get(self.band)
         if state is None:
             settings=config.load(self.band)
-            state={'settings':settings,'packets':deque(maxlen=2000),'demodulated':deque(maxlen=2000),'pending':deque(maxlen=2000),
+            state={'settings':settings,'packets':deque(maxlen=2000),'demodulated':deque(maxlen=2000),'decoded_candidates':deque(maxlen=2000),'pending':deque(maxlen=2000),
                    'engine':Engine(isolated=True),'key_options':{},'newest_first':settings.newest_first,
                    'water':None,'water_index':0,'water_count':0,'water_key':None,'last_plot':None,
                    'last_total':0,'last_stats':time.monotonic(),'actual_gain_text':'—','paused':False}
