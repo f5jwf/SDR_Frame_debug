@@ -393,10 +393,10 @@ class MainWindow(W.QMainWindow):
             if result is not None and result.valid:
                 details={'PHY':{'modulation':'OOK/ASK PWM','raw_bit_length':64,'integrity':'non renseignée'},
                          'cerberus_pro501':{'raw_bits':result.raw_bits,'repeats':result.repeats,'frame_confidence':result.frame_confidence,
-                            'symbol_confidence':result.symbol_confidence,'sensor_key':result.sensor_key,'event':result.event,
+                            'symbol_confidence':result.symbol_confidence,'frame_fingerprint':result.sensor_key,'sensor_id':'non déterminé','event':result.event,
                             'battery':result.battery,'timing_us':result.timing_us,'ratio_short':result.ratio_short,'ratio_long':result.ratio_long}}
                 decoded=Frame(frame.timestamp,1,frame.frequency,result.raw_u64.to_bytes(8,'big'),None,float('nan'),details,
-                              f'CERBERUS PRO-501 · {result.event} · capteur {result.sensor_key} · {result.repeats} répétitions · confiance {result.frame_confidence:.0%}',protocol='cerberus-pro501')
+                              f'CERBERUS PRO-501 · {result.event} · empreinte trame {result.sensor_key} · {result.repeats} répétitions · confiance {result.frame_confidence:.0%}',protocol='cerberus-pro501')
                 self.packets.append(decoded);self.add_row(decoded)
         # rtl_433 candidates are associated by their timestamp with the selected
         # raw burst.  They are retained until selection, never mixed with other bursts.

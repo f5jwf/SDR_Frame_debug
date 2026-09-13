@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.8.1 — 13 septembre 2026
+
+- Le champ CERBERUS affiché comme identifiant était l’empreinte de la trame complète, susceptible de changer avec les bits roulants ou d’état. Il est désormais nommé « empreinte trame » ; le `sensor_id` reste explicitement non déterminé.
+
 ## 0.8.0 — 13 septembre 2026
 
 - La liste des trames décodées ISM est désormais alimentée uniquement par la rafale démodulée sélectionnée. Horodatage complet en millisecondes et colonne hexadécimale redimensionnable à la souris.
