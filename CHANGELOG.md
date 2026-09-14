@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.10.1 — 14 septembre 2026
+
+- Sauver hex suit désormais l’affichage choisi dans Données démodulées : PWM en hexadécimal, ou flux discriminé 0/1 dans un fichier `.bits`.
+
 ## 0.10.0 — 14 septembre 2026
 
 - Dans Données démodulées, une case permet d’afficher les pulses PWM brutes ou le flux 0/1 brut obtenu par discrimination adaptative du rapport cyclique, avant synchronisation et consensus.

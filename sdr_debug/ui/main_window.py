@@ -461,24 +461,33 @@ class MainWindow(W.QMainWindow):
         self.raw.setPlainText('\n'.join(f'{i:04x}  '+frame.raw[i:i+16].hex(' ').ljust(47)+'  '+''.join(chr(b) if 32<=b<127 else '.' for b in frame.raw[i:i+16]) for i in range(0,len(frame.raw),16)))
 
     def export(self,checked=False,session=False,hexadecimal=False):
-        title='Sauver les trames visibles au format hexadécimal' if hexadecimal else ('Sauver session' if session else 'Exporter les trames visibles')
-        filters='Fichier hexadécimal (*.hex)' if hexadecimal else ('JSON (*.json)' if session else 'JSON (*.json);;CSV (*.csv);;Wireshark PCAP (*.pcap)')
+        selected_raw=None
+        if hexadecimal and self.band != 'zigbee' and self.demod_table.currentRow() >= 0:
+            item=self.demod_table.item(self.demod_table.currentRow(),0)
+            selected_raw=item.data(QtCore.Qt.ItemDataRole.UserRole) if item is not None else None
+        bit_export=bool(hexadecimal and selected_raw is not None and self.demod_bits.isChecked())
+        title=('Sauver le flux binaire discriminé' if bit_export else 'Sauver les trames visibles au format hexadécimal') if hexadecimal else ('Sauver session' if session else 'Exporter les trames visibles')
+        filters=('Flux binaire discriminé (*.bits);;Texte (*.txt)' if bit_export else 'Fichier hexadécimal (*.hex)') if hexadecimal else ('JSON (*.json)' if session else 'JSON (*.json);;CSV (*.csv);;Wireshark PCAP (*.pcap)')
         path,_=W.QFileDialog.getSaveFileName(self,title,self.settings.capture_dir,filters)
         if not path:return
-        if hexadecimal and not Path(path).suffix:path+='.hex'
+        if hexadecimal and not Path(path).suffix:path+=('.bits' if bit_export else '.hex')
         self.settings.capture_dir=str(Path(path).parent)
         if session:
             frames=list(self.packets)+list(self.pending)
-        elif hexadecimal and self.band != 'zigbee' and self.demod_table.currentRow() >= 0:
-            # The raw OOK burst is the object the user selected.  It must take
-            # precedence over the short, derived decoder result in the table below.
-            item=self.demod_table.item(self.demod_table.currentRow(),0)
-            frames=[item.data(QtCore.Qt.ItemDataRole.UserRole)] if item is not None else []
+        elif selected_raw is not None:
+            frames=[selected_raw]
         else:
             frames=[f for f in self.packets if self.matches(f)]
         metadata={'settings':self.settings.public(),'counters':dict(self.engine.counts)} if session else {}
         def job():
-            try:export_frames(path,frames,metadata); self.tasks.put(('info',f'Export terminé : {path}'))
+            try:
+                if bit_export:
+                    bits=self.demodulated_bits(selected_raw)
+                    if not bits:raise ValueError('Discrimination PWM indisponible pour cette rafale')
+                    Path(path).write_text('\n'.join(bits[offset:offset+64] for offset in range(0,len(bits),64))+'\n',encoding='ascii',newline='\n')
+                else:
+                    export_frames(path,frames,metadata)
+                self.tasks.put(('info',f'Export terminé : {path}'))
             except Exception as exc:self.tasks.put(('error',str(exc)))
         threading.Thread(target=job,daemon=True).start()
 
