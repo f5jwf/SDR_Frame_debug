@@ -1,7 +1,7 @@
 from pathlib import Path
 import pytest
 from sdr_debug.protocols.ism.cerberus_pro501 import (
-    PRO501_FRAME_BITS, PRO501_SENSOR_PROFILES, compare_frames, decode_pro501, deglitch_edges, match_sensor_profile, parse_hex_records,
+    PRO501_FRAME_BITS, PRO501_SENSOR_PROFILES, discriminate_pro501_bits, compare_frames, decode_pro501, deglitch_edges, match_sensor_profile, parse_hex_records,
 )
 
 
@@ -53,3 +53,8 @@ def test_learned_profile_requires_unambiguous_radio_signature():
     profile, distance, margin, distances = match_sensor_profile(PRO501_SENSOR_PROFILES['B'])
     assert profile == 'B' and distance == 0 and margin >= 1
     assert distances['B'] == 0
+
+
+def test_discrimination_exposes_the_full_raw_bitstream_before_consensus():
+    bits = discriminate_pro501_bits(burst(FRAME_B, .37, .70, repeats=4))
+    assert bits is not None and FRAME_B in bits and len(bits) >= 4 * PRO501_FRAME_BITS

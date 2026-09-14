@@ -175,6 +175,18 @@ def compare_frames(a: str, b: str) -> list[int]:
     return [index for index, (left, right) in enumerate(zip(a, b)) if left != right]
 
 
+def discriminate_pro501_bits(edges) -> str | None:
+    """Return every plausible PWM symbol as a raw adaptive 0/1 stream."""
+    symbols = _symbols(edges)
+    ratios = [ratio for ratio, _ in symbols]
+    clusters = _clusters(ratios)
+    if clusters is None:
+        return None
+    short, long = clusters
+    threshold = (short + long) / 2
+    return ''.join('1' if ratio < threshold else '0' for ratio in ratios)
+
+
 def match_sensor_profile(bits: str):
     """Match a complete demodulated bit stream against learned 64-bit profiles."""
     if len(bits) < PRO501_FRAME_BITS:

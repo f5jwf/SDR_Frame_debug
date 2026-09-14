@@ -15,7 +15,7 @@ from ..dsp.engine import Engine
 from ..export.packets import export_frames
 from ..protocols.registry import available
 from ..protocols.base import Frame
-from ..protocols.ism.cerberus_pro501 import decode_pro501
+from ..protocols.ism.cerberus_pro501 import decode_pro501, discriminate_pro501_bits
 from ..sdr.backends import discover
 from ..sdr.rates import SAMPLE_RATES,usable_bandwidth
 
@@ -142,8 +142,8 @@ class MainWindow(W.QMainWindow):
         row=W.QHBoxLayout(); self.pause=W.QCheckBox('Pause affichage'); self.pause.toggled.connect(self.unpause)
         self.favorite_only=W.QCheckBox('Favoris'); self.favorite_only.toggled.connect(self.refresh_table)
         clear=W.QPushButton('Effacer'); clear.clicked.connect(self.clear_packets); row.addWidget(self.pause); row.addWidget(self.favorite_only); row.addWidget(clear); rl.addLayout(row)
-        self.demod_label=W.QLabel('Données démodulées');rl.addWidget(self.demod_label)
-        self.demod_table=W.QTableWidget(0,5);self.demod_table.setHorizontalHeaderLabels(['Date / heure','Durée','Octets','Hexa (début)','Type']);self.demod_table.verticalHeader().hide();self.demod_table.verticalHeader().setDefaultSectionSize(30)
+        demod_title=W.QHBoxLayout();self.demod_label=W.QLabel('Données démodulées');self.demod_bits=W.QCheckBox('Afficher bits 0/1');self.demod_bits.setToolTip('Affiche le flux brut après discrimination PWM adaptative, sans synchronisation ni consensus.');self.demod_bits.toggled.connect(self.refresh_demodulated_view);demod_title.addWidget(self.demod_label);demod_title.addStretch();demod_title.addWidget(self.demod_bits);rl.addLayout(demod_title)
+        self.demod_table=W.QTableWidget(0,5);self.demod_table.setHorizontalHeaderLabels(['Date / heure','Durée','Octets','PWM hex (début)','Type']);self.demod_table.verticalHeader().hide();self.demod_table.verticalHeader().setDefaultSectionSize(30)
         self.demod_table.setSelectionBehavior(W.QAbstractItemView.SelectionBehavior.SelectRows);self.demod_table.setSelectionMode(W.QAbstractItemView.SelectionMode.SingleSelection);self.demod_table.setEditTriggers(W.QAbstractItemView.EditTrigger.NoEditTriggers)
         self.demod_table.horizontalHeader().setSectionResizeMode(3,W.QHeaderView.ResizeMode.Interactive)
         for c,width in enumerate([190,65,55,300,180]):self.demod_table.setColumnWidth(c,width)
@@ -354,13 +354,35 @@ class MainWindow(W.QMainWindow):
             self.table.setItem(row,col,item)
             if col==0:self.row_items[id(frame)]=item
 
+    def demodulated_bits(self, frame):
+        demod=frame.fields.setdefault('Démodulation',{})
+        if 'bits_01' not in demod:
+            if len(frame.raw) % 3:
+                demod['bits_01']=''
+            else:
+                edges=[(frame.raw[index],int.from_bytes(frame.raw[index+1:index+3],'big')) for index in range(0,len(frame.raw),3)]
+                demod['bits_01']=discriminate_pro501_bits(edges) or ''
+        return demod['bits_01']
+
+    def refresh_demodulated_view(self, *args):
+        if not hasattr(self,'demod_table'):return
+        row=self.demod_table.currentRow(); self.demod_table.blockSignals(True); self.demod_table.setRowCount(0);self.demod_row_items.clear()
+        for frame in self.demodulated:self.add_demodulated_row(frame)
+        self.demod_table.horizontalHeaderItem(3).setText('Bits 0/1 (début)' if self.demod_bits.isChecked() else 'PWM hex (début)')
+        self.demod_table.blockSignals(False)
+        if row>=0 and row<self.demod_table.rowCount():self.demod_table.selectRow(row)
+        self.show_demodulated()
+
     def add_demodulated_row(self,frame):
         row=self.demod_table.rowCount();self.demod_table.insertRow(row)
         duration=frame.fields.get('Démodulation',{}).get('durée_ms',frame.fields.get('PHY',{}).get('duration_ms','—'))
-        preview=frame.raw.hex().upper();preview=preview[:48]+('…' if len(preview)>48 else '') if preview else 'non fourni'
+        if self.demod_bits.isChecked():
+            payload=self.demodulated_bits(frame); preview=payload[:96]+('…' if len(payload)>96 else ''); tooltip=payload or 'Discrimination PWM indisponible'
+        else:
+            payload=frame.raw.hex().upper(); preview=payload[:48]+('…' if len(payload)>48 else '') if payload else 'non fourni'; tooltip=payload or 'Octets bruts non fournis'
         values=[datetime.fromtimestamp(frame.timestamp).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],f'{duration} ms',str(len(frame.raw)),preview,frame.summary]
         for col,value in enumerate(values):
-            item=W.QTableWidgetItem(value);item.setData(QtCore.Qt.ItemDataRole.UserRole,frame);item.setToolTip(frame.raw.hex().upper() or 'Octets bruts non fournis')
+            item=W.QTableWidgetItem(value);item.setData(QtCore.Qt.ItemDataRole.UserRole,frame);item.setToolTip(tooltip)
             self.demod_table.setItem(row,col,item)
             if col==0:self.demod_row_items[id(frame)]=item
 
@@ -376,10 +398,15 @@ class MainWindow(W.QMainWindow):
                 for k,v in value.items():branch(node,k,v)
             elif isinstance(value,list):
                 for k,v in enumerate(value):branch(node,k,v)
-        branch(self.details,'Données démodulées',{'timestamp':datetime.fromtimestamp(frame.timestamp).isoformat(timespec='milliseconds'),'durée_ms':frame.fields.get('Démodulation',{}).get('durée_ms'),'octets_reçus':len(frame.raw),'hexadécimal':frame.raw.hex().upper()})
-        branch(self.details,'Décodage',{'statut':'non reconnu à ce stade','note':'Les octets représentent les pulses OOK : niveau logique + durée en microsecondes.'})
+        bits=self.demodulated_bits(frame) if self.demod_bits.isChecked() else ''
+        payload=bits if self.demod_bits.isChecked() else frame.raw.hex().upper()
+        branch(self.details,'Données démodulées',{'timestamp':datetime.fromtimestamp(frame.timestamp).isoformat(timespec='milliseconds'),'durée_ms':frame.fields.get('Démodulation',{}).get('durée_ms'),'octets_reçus':len(frame.raw),'mode':'bits 0/1 après discrimination PWM' if self.demod_bits.isChecked() else 'pulses PWM brutes','données':payload})
+        branch(self.details,'Décodage',{'statut':'non reconnu à ce stade','note':'Le flux 0/1 est brut : il précède la synchronisation et le consensus des répétitions.'})
         self.details.expandAll()
-        self.raw.setPlainText('\n'.join(f'{i:04x}  '+frame.raw[i:i+16].hex(' ').ljust(47)+'  '+''.join(chr(b) if 32<=b<127 else '.' for b in frame.raw[i:i+16]) for i in range(0,len(frame.raw),16)))
+        if self.demod_bits.isChecked():
+            self.raw.setPlainText('\n'.join(f'{offset:04d}  {bits[offset:offset+64]}' for offset in range(0,len(bits),64)) or 'Discrimination PWM indisponible')
+        else:
+            self.raw.setPlainText('\n'.join(f'{i:04x}  '+frame.raw[i:i+16].hex(' ').ljust(47)+'  '+''.join(chr(b) if 32<=b<127 else '.' for b in frame.raw[i:i+16]) for i in range(0,len(frame.raw),16)))
         self.decode_demodulated(frame)
 
     def decode_demodulated(self,frame):

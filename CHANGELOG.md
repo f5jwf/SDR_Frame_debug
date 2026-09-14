@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 0.10.0 — 14 septembre 2026
+
+- Dans Données démodulées, une case permet d’afficher les pulses PWM brutes ou le flux 0/1 brut obtenu par discrimination adaptative du rapport cyclique, avant synchronisation et consensus.
+
 ## 0.9.1 — 13 septembre 2026
 
 - La reconnaissance de profil CERBERUS est strictement diagnostique : une erreur de profil ne peut plus empêcher l’affichage d’une trame valide.
